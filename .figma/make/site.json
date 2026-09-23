@@ -1,0 +1,10 @@
+{
+  "description": "Streamline project management with a minimalist interface for teams to organize tasks, track progress, and collaborate efficiently.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
