@@ -106,7 +106,7 @@ export function TeamPage({ team, currentUserId, onInvite, onRoleChange, onRemove
               className="px-5 py-4 bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-100 dark:border-zinc-800">
               <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-3">Invite by email</p>
               {inviteError && (
-                <p className="mb-2 text-xs text-red-600 dark:text-red-400">{inviteError}</p>
+                <p role="alert" className="mb-2 text-xs text-red-600 dark:text-red-400">{inviteError}</p>
               )}
               <div className="flex gap-2">
                 <input
@@ -124,16 +124,16 @@ export function TeamPage({ team, currentUserId, onInvite, onRoleChange, onRemove
                   className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-colors">
                   {inviteLoading ? 'Sending…' : 'Send'}
                 </button>
-                <button type="button" onClick={() => setShowInvite(false)}
+                <button type="button" onClick={() => setShowInvite(false)} aria-label="Cancel invite"
                   className="px-2 py-1.5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
                 </button>
               </div>
             </form>
           )}
 
           {memberActionError && (
-            <p className="px-5 py-2 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950 border-b border-red-100 dark:border-red-900">
+            <p role="alert" className="px-5 py-2 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950 border-b border-red-100 dark:border-red-900">
               {memberActionError}
             </p>
           )}
@@ -152,8 +152,10 @@ export function TeamPage({ team, currentUserId, onInvite, onRoleChange, onRemove
                 <div className="flex items-center gap-2">
                   <RoleBadge role={member.role} />
                   {member.role !== 'owner' && member.id !== currentUserId && (
-                    <div className="hidden group-hover:flex items-center gap-1">
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
+                      <label className="sr-only" htmlFor={`role-${member.id}`}>Role for {member.username}</label>
                       <select
+                        id={`role-${member.id}`}
                         value={member.role}
                         onChange={e => {
                           setMemberActionError(null);
@@ -170,13 +172,14 @@ export function TeamPage({ team, currentUserId, onInvite, onRoleChange, onRemove
                           setMemberActionError(null);
                           onRemove(member.id).catch(err => setMemberActionError(err instanceof Error ? err.message : 'Could not remove member.'));
                         }}
-                        className="p-1 rounded text-zinc-400 hover:text-red-500 dark:hover:text-red-400 transition-colors">
-                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                        aria-label={`Remove ${member.username} from team`}
+                        className="p-2 rounded text-zinc-400 hover:text-red-500 dark:hover:text-red-400 transition-colors">
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
                       </button>
                     </div>
                   )}
                 </div>
-                <p className="text-xs text-zinc-400 dark:text-zinc-600 hidden sm:block">
+                <p className="text-xs text-zinc-500 dark:text-zinc-500 hidden sm:block">
                   Joined {new Date(member.joinedAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
                 </p>
               </div>
@@ -194,7 +197,7 @@ export function TeamPage({ team, currentUserId, onInvite, onRoleChange, onRemove
               <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">Leave team</p>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">You'll lose access to all projects in this team.</p>
               {leaveError && (
-                <p className="text-xs text-red-600 dark:text-red-400 mt-1">{leaveError}</p>
+                <p role="alert" className="text-xs text-red-600 dark:text-red-400 mt-1">{leaveError}</p>
               )}
             </div>
             <button onClick={handleLeave} disabled={leaveLoading}

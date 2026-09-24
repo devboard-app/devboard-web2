@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError } from '@/api/client';
 import { getMe, updateMe, type CoreUser } from '@/api/users';
+import { LoadingState, ErrorState } from '@/components/ui/LoadingState';
 
 interface Props {
   /** Called with the saved profile so the rest of the app (avatar in the sidebar) updates without a reload. */
@@ -35,12 +36,14 @@ export function ProfilePage({ onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
+    setLoadError(null);
     getMe()
       .then(p => { setProfile(p); setAvatar(p.avatar); setTimezone(p.timezone); })
       .catch(err => setLoadError(messageFor(err)));
-  }, []);
+  }, [reloadToken]);
 
   // The backend stores timezone as free text, so constrain it to real IANA names.
   // The saved value is always included, in case the browser's list doesn't have it.
@@ -51,8 +54,8 @@ export function ProfilePage({ onSaved }: Props) {
     return profile && !all.includes(profile.timezone) ? [profile.timezone, ...all] : all;
   }, [profile]);
 
-  if (loadError) return <p className="p-6 text-sm text-red-600 dark:text-red-400">{loadError}</p>;
-  if (!profile) return <p className="p-6 text-sm text-zinc-500 dark:text-zinc-400">Loading…</p>;
+  if (loadError) return <ErrorState message={loadError} onRetry={() => setReloadToken(t => t + 1)} />;
+  if (!profile) return <LoadingState />;
 
   const avatarTrimmed = avatar.trim();
   const avatarInvalid = avatarTrimmed !== '' && !avatarTrimmed.startsWith('https://');
@@ -102,7 +105,7 @@ export function ProfilePage({ onSaved }: Props) {
             <input id="avatar" type="url" value={avatar} onChange={e => { setAvatar(e.target.value); setSaved(false); }}
               placeholder="https://example.com/me.png" className={inputCls} />
             {avatarInvalid ? (
-              <p className="text-xs text-red-600 dark:text-red-400 mt-1">Use an https:// link.</p>
+              <p role="alert" className="text-xs text-red-600 dark:text-red-400 mt-1">Use an https:// link.</p>
             ) : (
               <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-1">Link to an image; leave empty to use your initials.</p>
             )}

@@ -11,6 +11,7 @@ interface Props {
   onAdd: (userId: string, role: ProjectRole) => Promise<void>;
   onChangeRole: (userId: string, role: ProjectRole) => Promise<void>;
   onRemove: (userId: string) => Promise<void>;
+  onGoToTeam: () => void;
 }
 
 const roleLabels: Record<ProjectRole, string> = { lead: 'Lead', contributor: 'Contributor' };
@@ -22,7 +23,7 @@ function errorMessage(err: unknown, fallback: string) {
   return err instanceof Error ? err.message : fallback;
 }
 
-export function MembersPage({ team, project, currentUserId, onAdd, onChangeRole, onRemove }: Props) {
+export function MembersPage({ team, project, currentUserId, onAdd, onChangeRole, onRemove, onGoToTeam }: Props) {
   // Only leads can manage members (the backend returns 403 for anyone else).
   const isLead = project.leadIds.includes(currentUserId);
   const roleOf = (userId: string): ProjectRole => (project.leadIds.includes(userId) ? 'lead' : 'contributor');
@@ -106,7 +107,12 @@ export function MembersPage({ team, project, currentUserId, onAdd, onChangeRole,
           <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-5">
             <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200 mb-3">Add a member</p>
             {candidates.length === 0 ? (
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">Everyone on {team.name} is already in this project. Invite people to the team first from the Team page.</p>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                Everyone on {team.name} is already in this project.{' '}
+                <button onClick={onGoToTeam} className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium">
+                  Invite more people to the team
+                </button>.
+              </p>
             ) : (
               <div className="flex gap-2">
                 <select value={newUserId || candidates[0].id} onChange={e => setNewUserId(e.target.value)} aria-label="Team member to add"

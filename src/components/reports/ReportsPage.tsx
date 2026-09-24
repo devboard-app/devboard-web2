@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Project } from '@/types';
+import type { Project, TabType } from '@/types';
 import { ActivityRow } from '@/components/activity/ActivityRow';
 import { useReport } from '@/hooks/useReport';
 import { useProjectActivity } from '@/hooks/useProjectActivity';
@@ -9,14 +9,50 @@ import {
   type BurndownReport, type SprintVelocity,
 } from '@/api/reports';
 import { ChatPanel } from './ChatPanel';
+import { ProjectTopBar } from '@/components/projects/ProjectTopBar';
 
-type ReportTab = 'activity' | 'velocity' | 'cycle-time' | 'burndown' | 'chat';
+type ReportTab = 'activity' | 'dashboard';
 
-function ReportState({ loading, error, empty, emptyText, children }: {
-  loading: boolean; error: string | null; empty?: boolean; emptyText?: string; children: React.ReactNode;
+function RefreshButton({ onClick, loading, label }: { onClick: () => void; loading?: boolean; label: string }) {
+  return (
+    <button onClick={onClick} disabled={loading} aria-label={label} title={label}
+      className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors disabled:opacity-50 flex-shrink-0">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true" className={loading ? 'animate-spin' : ''}>
+        <polyline points="23 4 23 10 17 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <polyline points="1 20 1 14 7 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </button>
+  );
+}
+
+function ReportState({ loading, error, onRetry, empty, emptyText, children }: {
+  loading: boolean; error: string | null; onRetry?: () => void; empty?: boolean; emptyText?: string; children: React.ReactNode;
 }) {
-  if (loading) return <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading…</p>;
-  if (error) return <p className="text-sm text-red-600 dark:text-red-400">{error}</p>;
+  if (loading) {
+    return (
+      <div role="status" className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400 py-4">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="animate-spin" aria-hidden="true">
+          <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" strokeOpacity="0.25" />
+          <path d="M14.5 8a6.5 6.5 0 00-6.5-6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+        <span>Loading…</span>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div role="alert" className="flex items-center gap-3 text-sm text-red-600 dark:text-red-400 py-4">
+        <span>{error}</span>
+        {onRetry && (
+          <button onClick={onRetry}
+            className="px-2.5 py-1 text-xs font-medium text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
+            Try again
+          </button>
+        )}
+      </div>
+    );
+  }
   if (empty) {
     return (
       <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 px-5 py-10 text-center">
@@ -155,14 +191,17 @@ function buildBurndownSeries(r: BurndownReport): BurndownPoint[] {
 const card = 'bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800';
 
 function ActivityTab({ project, isLead }: { project: Project; isLead: boolean }) {
-  const { events, total, loading, loadingMore, error, loadMore, userFor } = useProjectActivity(project.id, project.members);
+  const { events, total, loading, loadingMore, error, loadMore, refetch, userFor } = useProjectActivity(project.id, project.members);
 
   return (
     <div className="max-w-2xl space-y-3">
-      {!isLead && (
-        <p className="text-xs text-zinc-400 dark:text-zinc-500">Showing your own activity. Project leads see everyone's.</p>
-      )}
-      <ReportState loading={loading} error={events.length === 0 ? error : null} empty={events.length === 0} emptyText="No activity yet.">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-zinc-400 dark:text-zinc-500">
+          {isLead ? 'All project activity' : "Showing your own activity. Project leads see everyone's."}
+        </p>
+        <RefreshButton onClick={refetch} loading={loading} label="Refresh activity" />
+      </div>
+      <ReportState loading={loading} error={events.length === 0 ? error : null} onRetry={refetch} empty={events.length === 0} emptyText="No activity yet.">
         <div className={`${card} divide-y divide-zinc-100 dark:divide-zinc-800`}>
           {events.map((e, i) => <ActivityRow key={e._id ?? i} event={e} userFor={userFor} />)}
         </div>
@@ -178,8 +217,8 @@ function ActivityTab({ project, isLead }: { project: Project; isLead: boolean })
   );
 }
 
-function VelocityTab({ projectId }: { projectId: string }) {
-  const { data, loading, error } = useReport(() => getVelocity(projectId), projectId);
+function VelocityCard({ projectId }: { projectId: string }) {
+  const { data, loading, error, refetch } = useReport(() => getVelocity(projectId), projectId);
   const sprints = data?.sprints ?? [];
 
   const committed = sprints.reduce((sum, s) => sum + s.committed_points, 0);
@@ -187,26 +226,25 @@ function VelocityTab({ projectId }: { projectId: string }) {
   const best = sprints.reduce<SprintVelocity | null>((b, s) => (!b || s.completed_points > b.completed_points ? s : b), null);
 
   return (
-    <div className="max-w-2xl space-y-4">
-      <ReportState loading={loading} error={error} empty={sprints.length === 0} emptyText="No sprints have been started yet, so there is no velocity to show.">
-        <div className={`${card} p-5`}>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Sprint velocity</h3>
-              <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5">Story points committed at start vs. completed per sprint</p>
-            </div>
-            <div className="flex items-center gap-3 text-[11px] text-zinc-500 dark:text-zinc-400">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block bg-indigo-300" />Committed</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block bg-indigo-600" />Completed</span>
-            </div>
+    <div className={`${card} p-5`}>
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Sprint velocity</h3>
+        <RefreshButton onClick={refetch} loading={loading} label="Refresh velocity" />
+      </div>
+      <ReportState loading={loading} error={error} onRetry={refetch} empty={sprints.length === 0} emptyText="No sprints have been started yet, so there is no velocity to show.">
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-xs text-zinc-400 dark:text-zinc-500">Story points committed at start vs. completed per sprint</p>
+          <div className="flex items-center gap-3 text-[11px] text-zinc-500 dark:text-zinc-400 flex-shrink-0">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block bg-indigo-300" />Committed</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block bg-indigo-600" />Completed</span>
           </div>
-          <GroupedBarChart data={sprints} />
-          <StatTiles stats={[
-            { label: 'Avg velocity', value: `${(data?.average_points ?? 0).toFixed(1)} pts` },
-            { label: 'Best sprint', value: best ? `${best.sprint_name} · ${best.completed_points} pts` : '—' },
-            { label: 'Completion rate', value: committed > 0 ? `${Math.round((completed / committed) * 100)}%` : '—' },
-          ]} />
         </div>
+        <GroupedBarChart data={sprints} />
+        <StatTiles stats={[
+          { label: 'Avg velocity', value: `${(data?.average_points ?? 0).toFixed(1)} pts` },
+          { label: 'Best sprint', value: best ? `${best.sprint_name} · ${best.completed_points} pts` : '—' },
+          { label: 'Completion rate', value: committed > 0 ? `${Math.round((completed / committed) * 100)}%` : '—' },
+        ]} />
       </ReportState>
     </div>
   );
@@ -214,38 +252,37 @@ function VelocityTab({ projectId }: { projectId: string }) {
 
 const MAX_CYCLE_ROWS = 20;
 
-function CycleTimeTab({ projectId }: { projectId: string }) {
-  const { data, loading, error } = useReport(() => getCycleTime(projectId), projectId);
+function CycleTimeCard({ projectId }: { projectId: string }) {
+  const { data, loading, error, refetch } = useReport(() => getCycleTime(projectId), projectId);
   // Server sorts longest lead time first.
   const rows = (data?.tickets ?? []).slice(0, MAX_CYCLE_ROWS);
   const maxLead = Math.max(...rows.map(r => r.lead_time_days), 1);
 
   return (
-    <div className="max-w-2xl space-y-4">
-      <ReportState loading={loading} error={error} empty={!data || data.completed_tickets === 0} emptyText="No tickets have been completed yet, so there is no cycle time to show.">
-        <div className={`${card} p-5`}>
-          <div className="mb-1">
-            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Cycle time</h3>
-            <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5">
-              Lead time is creation → Done. Cycle time is the days a ticket spent In progress or In review.
-            </p>
-          </div>
-          <StatTiles stats={[
-            { label: 'Completed tickets', value: String(data?.completed_tickets ?? 0) },
-            { label: 'Median lead time', value: `${data?.median_lead_time_days ?? 0} days` },
-            { label: 'Median cycle time', value: `${data?.median_cycle_time_days ?? 0} days` },
-          ]} />
-        </div>
+    <div className={`${card} p-5`}>
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Cycle time</h3>
+        <RefreshButton onClick={refetch} loading={loading} label="Refresh cycle time" />
+      </div>
+      <ReportState loading={loading} error={error} onRetry={refetch} empty={!data || data.completed_tickets === 0} emptyText="No tickets have been completed yet, so there is no cycle time to show.">
+        <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-4">
+          Lead time is creation → Done. Cycle time is the days a ticket spent In progress or In review.
+        </p>
+        <StatTiles stats={[
+          { label: 'Completed tickets', value: String(data?.completed_tickets ?? 0) },
+          { label: 'Median lead time', value: `${data?.median_lead_time_days ?? 0} days` },
+          { label: 'Median cycle time', value: `${data?.median_cycle_time_days ?? 0} days` },
+        ]} />
 
-        <div className={`${card} divide-y divide-zinc-100 dark:divide-zinc-800`}>
+        <div className="mt-5 pt-5 border-t border-zinc-100 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800 -mx-5">
           {rows.map(t => (
-            <div key={t.ticket_key} className="flex items-center gap-4 px-5 py-3">
+            <div key={t.ticket_key} className="flex items-center gap-4 px-5 py-2.5">
               <span className="text-sm font-mono font-medium text-zinc-700 dark:text-zinc-300 w-24 flex-shrink-0">{t.ticket_key}</span>
               <div className="flex-1 h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
                 <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${(t.lead_time_days / maxLead) * 100}%` }} />
               </div>
               <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300 w-16 text-right">{t.lead_time_days}d</span>
-              <span className="text-xs text-zinc-400 dark:text-zinc-500 w-24 text-right">
+              <span className="text-xs text-zinc-400 dark:text-zinc-500 w-24 text-right hidden lg:block">
                 {t.cycle_time_days !== null ? `${t.cycle_time_days}d active` : 'not worked'}
                 {t.reopened > 0 && ` · reopened ${t.reopened}×`}
               </span>
@@ -253,14 +290,14 @@ function CycleTimeTab({ projectId }: { projectId: string }) {
           ))}
         </div>
         {data && data.completed_tickets > rows.length && (
-          <p className="text-xs text-zinc-400 dark:text-zinc-500">Showing the {rows.length} longest of {data.completed_tickets} completed tickets.</p>
+          <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-2">Showing the {rows.length} longest of {data.completed_tickets} completed tickets.</p>
         )}
       </ReportState>
     </div>
   );
 }
 
-function BurndownTab({ teamId, projectId }: { teamId: string; projectId: string }) {
+function BurndownCard({ teamId, projectId }: { teamId: string; projectId: string }) {
   const [chosenId, setChosenId] = useState<string | null>(null);
 
   // Only started sprints have burndown data; a `created` one would 404.
@@ -287,93 +324,101 @@ function BurndownTab({ teamId, projectId }: { teamId: string; projectId: string 
   const series = report ? buildBurndownSeries(report) : [];
   const latest = report?.days[report.days.length - 1];
 
+  function refreshBoth() { sprintsQ.refetch(); reportQ.refetch(); }
+
   return (
-    <div className="max-w-2xl space-y-4">
-      <ReportState loading={sprintsQ.loading} error={sprintsQ.error} empty={sprints.length === 0} emptyText="Start a sprint to see its burndown.">
-        <div className={`${card} p-5`}>
-          <div className="flex items-center justify-between gap-4 mb-4">
-            <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">
-                {report?.sprint_name ?? sprint?.name} burndown
-              </h3>
-              <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5">
-                {report ? `${dayLabel(utcDay(report.start_date))} – ${dayLabel(utcDay(report.end_date))} · ${report.committed_points} story points committed` : ' '}
-              </p>
-            </div>
-            <div className="flex items-center gap-3 flex-shrink-0">
-              {sprints.length > 1 && (
-                <select value={sprintId ?? ''} onChange={e => setChosenId(e.target.value)}
-                  className="text-xs px-2 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
-                  {sprints.map(s => <option key={s.id} value={s.id}>{s.name}{s.status === 'active' ? ' (active)' : ''}{hasDates(s) ? '' : ' · no dates'}</option>)}
-                </select>
-              )}
-              <div className="flex items-center gap-3 text-[11px] text-zinc-500 dark:text-zinc-400">
-                <span className="flex items-center gap-1"><span className="w-4 h-0.5 inline-block bg-indigo-300" style={{ borderTop: '1px dashed' }} />Ideal</span>
-                <span className="flex items-center gap-1"><span className="w-4 h-0.5 inline-block bg-indigo-600 rounded" />Actual</span>
-              </div>
+    <div className={`${card} p-5`}>
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+          {report?.sprint_name ?? sprint?.name ?? 'Burndown'}
+        </h3>
+        <RefreshButton onClick={refreshBoth} loading={sprintsQ.loading || reportQ.loading} label="Refresh burndown" />
+      </div>
+      <ReportState loading={sprintsQ.loading} error={sprintsQ.error} onRetry={sprintsQ.refetch} empty={sprints.length === 0} emptyText="Start a sprint to see its burndown.">
+        <div className="flex items-center justify-between gap-4 mb-4">
+          <p className="text-xs text-zinc-400 dark:text-zinc-500 min-w-0 truncate">
+            {report ? `${dayLabel(utcDay(report.start_date))} – ${dayLabel(utcDay(report.end_date))} · ${report.committed_points} story points committed` : ' '}
+          </p>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {sprints.length > 1 && (
+              <select value={sprintId ?? ''} onChange={e => setChosenId(e.target.value)}
+                className="text-xs px-2 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
+                {sprints.map(s => <option key={s.id} value={s.id}>{s.name}{s.status === 'active' ? ' (active)' : ''}{hasDates(s) ? '' : ' · no dates'}</option>)}
+              </select>
+            )}
+            <div className="flex items-center gap-3 text-[11px] text-zinc-500 dark:text-zinc-400">
+              <span className="flex items-center gap-1"><span className="w-4 h-0.5 inline-block bg-indigo-300" style={{ borderTop: '1px dashed' }} />Ideal</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-0.5 inline-block bg-indigo-600 rounded" />Actual</span>
             </div>
           </div>
-
-          {undated ? (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              This sprint has no start and end dates, so there is nothing to plot. Dates can only be set while a sprint
-              is still in the Created state, so this one can't get a burndown. Add both dates when creating the next sprint.
-            </p>
-          ) : (
-          <ReportState loading={reportQ.loading} error={reportQ.error} empty={!report || series.length === 0} emptyText="No burndown data for this sprint yet.">
-            <BurndownChart data={series} />
-            <StatTiles stats={[
-              { label: 'Committed at start', value: `${report?.committed_points ?? 0} pts` },
-              { label: 'Remaining', value: latest ? `${latest.remaining_points} pts` : '—' },
-              { label: 'Forecast', value: !latest ? '—' : latest.remaining_points <= latest.ideal_points ? 'On track' : 'At risk' },
-            ]} />
-            {report && report.unpointed_tickets > 0 && (
-              <p className="mt-4 text-xs text-amber-700 dark:text-amber-400">
-                {report.unpointed_tickets} ticket{report.unpointed_tickets === 1 ? ' has' : 's have'} no story points and {report.unpointed_tickets === 1 ? "isn't" : "aren't"} counted.
-              </p>
-            )}
-          </ReportState>
-          )}
         </div>
+
+        {undated ? (
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            This sprint has no start and end dates, so there is nothing to plot. Dates can only be set while a sprint
+            is still in the Created state, so this one can't get a burndown. Add both dates when creating the next sprint.
+          </p>
+        ) : (
+        <ReportState loading={reportQ.loading} error={reportQ.error} onRetry={reportQ.refetch} empty={!report || series.length === 0} emptyText="No burndown data for this sprint yet.">
+          <BurndownChart data={series} />
+          <StatTiles stats={[
+            { label: 'Committed at start', value: `${report?.committed_points ?? 0} pts` },
+            { label: 'Remaining', value: latest ? `${latest.remaining_points} pts` : '—' },
+            { label: 'Forecast', value: !latest ? '—' : latest.remaining_points <= latest.ideal_points ? 'On track' : 'At risk' },
+          ]} />
+          {report && report.unpointed_tickets > 0 && (
+            <p className="mt-4 text-xs text-amber-700 dark:text-amber-400">
+              {report.unpointed_tickets} ticket{report.unpointed_tickets === 1 ? ' has' : 's have'} no story points and {report.unpointed_tickets === 1 ? "isn't" : "aren't"} counted.
+            </p>
+          )}
+        </ReportState>
+        )}
       </ReportState>
     </div>
   );
 }
 
-export function ReportsPage({ teamId, project, currentUserId }: { teamId: string; project: Project; currentUserId: string }) {
+interface ReportsPageProps {
+  teamName: string;
+  onGoToTeam: () => void;
+  teamId: string;
+  project: Project;
+  currentUserId: string;
+  onNavigateProjectTab: (tab: TabType) => void;
+  onOpenSettings: () => void;
+}
+
+export function ReportsPage({ teamName, onGoToTeam, teamId, project, currentUserId, onNavigateProjectTab, onOpenSettings }: ReportsPageProps) {
   const [tab, setTab] = useState<ReportTab>('activity');
+  const [chatOpen, setChatOpen] = useState(false);
   const isLead = project.leadIds.includes(currentUserId);
 
-  // Hiding the lead-only tabs is politeness; devboard-analytics returns 403 for
-  // anyone else regardless.
+  // Hiding the Dashboard tab for non-leads is politeness; devboard-analytics returns
+  // 403 for anyone else regardless.
   const tabs: { id: ReportTab; label: string }[] = [
     { id: 'activity', label: 'Activity' },
-    ...(isLead ? [
-      { id: 'velocity' as const, label: 'Velocity' },
-      { id: 'cycle-time' as const, label: 'Cycle time' },
-      { id: 'burndown' as const, label: 'Burndown' },
-    ] : []),
-    { id: 'chat', label: 'Chat' },
+    ...(isLead ? [{ id: 'dashboard' as const, label: 'Dashboard' }] : []),
   ];
   const activeTab = tabs.some(t => t.id === tab) ? tab : 'activity';
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950">
-      {/* Header */}
-      <div className="flex-shrink-0 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 px-5 pt-4 pb-0">
-        <div className="flex items-center gap-3 mb-3">
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="text-indigo-600 dark:text-indigo-400">
-            <rect x="1" y="10" width="4" height="7" rx="1" stroke="currentColor" strokeWidth="1.3" />
-            <rect x="7" y="6" width="4" height="11" rx="1" stroke="currentColor" strokeWidth="1.3" />
-            <rect x="13" y="2" width="4" height="15" rx="1" stroke="currentColor" strokeWidth="1.3" />
-          </svg>
-          <h1 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Reports</h1>
-          <span className="text-sm text-zinc-400 dark:text-zinc-600">· {project.name}</span>
-        </div>
+    <div className="h-full flex flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950 relative">
+      <ProjectTopBar
+        teamName={teamName}
+        onGoToTeam={onGoToTeam}
+        project={project}
+        activeTab="reports"
+        onTabChange={onNavigateProjectTab}
+        onOpenReports={() => {}}
+        onOpenSettings={onOpenSettings}
+      />
+
+      {/* Report-type sub-tabs */}
+      <div className="flex-shrink-0 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 px-5">
         <div className="flex gap-0">
           {tabs.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
                 activeTab === t.id
                   ? 'border-indigo-600 dark:border-indigo-400 text-indigo-700 dark:text-indigo-400'
                   : 'border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
@@ -386,11 +431,46 @@ export function ReportsPage({ teamId, project, currentUserId }: { teamId: string
 
       <div className="flex-1 overflow-y-auto p-5">
         {activeTab === 'activity' && <ActivityTab project={project} isLead={isLead} />}
-        {activeTab === 'velocity' && <VelocityTab projectId={project.id} />}
-        {activeTab === 'cycle-time' && <CycleTimeTab projectId={project.id} />}
-        {activeTab === 'burndown' && <BurndownTab teamId={teamId} projectId={project.id} />}
-        {activeTab === 'chat' && <ChatPanel projectId={project.id} projectName={project.name} />}
+        {activeTab === 'dashboard' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <VelocityCard projectId={project.id} />
+            <CycleTimeCard projectId={project.id} />
+            <div className="lg:col-span-2">
+              <BurndownCard teamId={teamId} projectId={project.id} />
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Chat toggle */}
+      <button onClick={() => setChatOpen(v => !v)}
+        aria-label={chatOpen ? 'Close chat' : 'Open chat'} aria-expanded={chatOpen}
+        className="absolute bottom-6 right-6 w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg flex items-center justify-center transition-colors z-20">
+        {chatOpen ? (
+          <svg width="18" height="18" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+        ) : (
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M2.5 4.5h15v9h-8l-3.5 3v-3h-3.5v-9z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>
+        )}
+      </button>
+
+      {/* Chat slide-over */}
+      {chatOpen && (
+        <>
+          <div className="absolute inset-0 bg-black/10 dark:bg-black/30 z-10" onClick={() => setChatOpen(false)} />
+          <div className="absolute top-0 right-0 bottom-0 z-20 w-full sm:w-[380px] bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 flex-shrink-0">
+              <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Chat · {project.name}</p>
+              <button onClick={() => setChatOpen(false)} aria-label="Close chat"
+                className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+              </button>
+            </div>
+            <div className="flex-1 min-h-0">
+              <ChatPanel projectId={project.id} projectName={project.name} />
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

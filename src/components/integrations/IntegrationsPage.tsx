@@ -3,10 +3,13 @@ import type { Team, Project } from '@/types';
 import { useTeamIntegration } from '@/hooks/useTeamIntegration';
 import { useRepoLinks } from '@/hooks/useRepoLinks';
 import type { TeamIntegration, WebhookProvider, IntegrationPatch } from '@/api/integrations';
+import { ErrorState } from '@/components/ui/LoadingState';
+import { Skeleton } from '@/components/ui/Skeleton';
 
 interface Props {
   team: Team;
   currentUserId: string;
+  onOpenProject: (projectId: string) => void;
 }
 
 const REPO_PATTERN = /^[\w.-]+\/[\w.-]+$/;
@@ -22,6 +25,10 @@ const PROVIDERS: Record<WebhookProvider, { name: string; placeholder: string; fi
   discord: { name: 'Discord', placeholder: 'https://discord.com/api/webhooks/…', field: 'discord_webhook_url' },
 };
 
+// Public page of the DevBoard GitHub App (github.com/apps/<slug>). Set VITE_GITHUB_APP_URL
+// when the production App has a different slug from the dev one.
+const GITHUB_APP_URL: string = import.meta.env.VITE_GITHUB_APP_URL ?? 'https://github.com/apps/devboard-webhooks';
+
 const card = 'bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden mb-4';
 const inputCls = 'px-3 py-1.5 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500';
 
@@ -30,6 +37,19 @@ function GitHubIcon({ size = 20 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
       <path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.342-3.369-1.342-.454-1.155-1.11-1.463-1.11-1.463-.908-.62.069-.607.069-.607 1.004.07 1.532 1.032 1.532 1.032.891 1.529 2.341 1.088 2.91.832.09-.646.349-1.086.635-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.03-2.682-.103-.254-.447-1.27.097-2.646 0 0 .84-.269 2.75 1.026A9.578 9.578 0 0112 6.836a9.59 9.59 0 012.504.337c1.909-1.295 2.748-1.026 2.748-1.026.546 1.376.202 2.392.1 2.646.641.698 1.028 1.59 1.028 2.682 0 3.841-2.337 4.687-4.565 4.935.359.308.679.919.679 1.852 0 1.335-.012 2.415-.012 2.741 0 .267.18.578.688.48C19.138 20.164 22 16.417 22 12c0-5.523-4.477-10-10-10z" />
     </svg>
+  );
+}
+
+function IntegrationCardSkeleton() {
+  return (
+    <div className={`${card} flex items-start gap-4 px-5 py-5`} role="status" aria-label="Loading integrations">
+      <Skeleton className="w-10 h-10 rounded-xl flex-shrink-0" />
+      <div className="flex-1 space-y-2 pt-1">
+        <Skeleton className="h-3.5 w-24" />
+        <Skeleton className="h-3 w-full max-w-md" />
+        <Skeleton className="h-3 w-2/3 max-w-sm" />
+      </div>
+    </div>
   );
 }
 
@@ -46,7 +66,7 @@ function maskWebhook(url: string) {
   }
 }
 
-function GitHubCard({ teamId, projects }: { teamId: string; projects: Project[] }) {
+function GitHubCard({ teamId, projects, onOpenProject }: { teamId: string; projects: Project[]; onOpenProject: (projectId: string) => void }) {
   const { links, addLink, removeLink } = useRepoLinks(teamId);
   const [showAdd, setShowAdd] = useState(false);
   const [repo, setRepo] = useState('');
@@ -94,16 +114,16 @@ function GitHubCard({ teamId, projects }: { teamId: string; projects: Project[] 
             Link a repository to a project. When a push has a commit message that mentions a ticket key (like PLT-12),
             the commit is attached to that ticket.
           </p>
-          <details className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-            <summary className="cursor-pointer font-medium text-indigo-600 dark:text-indigo-400">GitHub-side setup</summary>
-            <p className="mt-1.5">
-              In the repository's Settings → Webhooks, add a webhook that sends <span className="font-medium">push</span> events
-              as <span className="font-mono">application/json</span> to
-              {' '}<span className="font-mono">/api/webhooks/github/</span> on the integrations service, signed with the
-              server's <span className="font-mono">GITHUB_WEBHOOK_SECRET</span>. DevBoard does not install a GitHub App.
-            </p>
-          </details>
+          <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+            <span className="font-medium">1.</span> Install the DevBoard GitHub App on the account or organization that owns the
+            repository and give it access to that repository. No webhook setup is needed.
+            {' '}<span className="font-medium">2.</span> Link the repository below.
+          </p>
         </div>
+        <a href={GITHUB_APP_URL} target="_blank" rel="noreferrer"
+          className="flex-shrink-0 px-3 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
+          Install GitHub App
+        </a>
       </div>
 
       <div className="border-t border-zinc-100 dark:border-zinc-800">
@@ -129,8 +149,8 @@ function GitHubCard({ teamId, projects }: { teamId: string; projects: Project[] 
                 className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-colors">
                 {busy ? 'Linking…' : 'Link'}
               </button>
-              <button onClick={() => setShowAdd(false)} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+              <button onClick={() => setShowAdd(false)} aria-label="Cancel linking repository" className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
               </button>
             </div>
             <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-1.5">Match GitHub's capitalization exactly; a repository can only be linked once.</p>
@@ -138,13 +158,13 @@ function GitHubCard({ teamId, projects }: { teamId: string; projects: Project[] 
         )}
 
         {error && (
-          <p className="px-5 py-2 text-xs text-red-600 dark:text-red-400 border-b border-zinc-100 dark:border-zinc-800">{error}</p>
+          <p role="alert" className="px-5 py-2 text-xs text-red-600 dark:text-red-400 border-b border-zinc-100 dark:border-zinc-800">{error}</p>
         )}
 
         {links.length === 0 ? (
           <div className="px-5 py-6 text-center">
-            <p className="text-sm text-zinc-400 dark:text-zinc-600">No repos linked from this browser</p>
-            <p className="text-xs text-zinc-300 dark:text-zinc-700 mt-0.5">
+            <p className="text-sm text-zinc-500 dark:text-zinc-500">No repos linked from this browser</p>
+            <p className="text-xs text-zinc-400 dark:text-zinc-600 mt-0.5">
               The server can't list existing links, so only ones you create here are shown.
             </p>
           </div>
@@ -156,12 +176,12 @@ function GitHubCard({ teamId, projects }: { teamId: string; projects: Project[] 
                 <div className="flex-1">
                   <p className="text-sm font-mono font-medium text-zinc-800 dark:text-zinc-200">{link.githubRepo}</p>
                   <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5">
-                    → {projectName(link.projectId)} · Linked {link.linkedAt.slice(0, 10)}
+                    → <button onClick={() => onOpenProject(link.projectId)} className="hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline">{projectName(link.projectId)}</button> · Linked {link.linkedAt.slice(0, 10)}
                   </p>
                 </div>
                 <button onClick={() => void handleRemove(link.id)} aria-label={`Unlink ${link.githubRepo}`}
-                  className="opacity-0 group-hover:opacity-100 p-1.5 text-zinc-400 hover:text-red-500 dark:hover:text-red-400 rounded-lg transition-all">
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 3.5h9M5 3.5V2h3v1.5M5.5 6v4M7.5 6v4M3 3.5L3.5 11h6L10 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-2 text-zinc-400 hover:text-red-500 dark:hover:text-red-400 rounded-lg transition-all">
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M2 3.5h9M5 3.5V2h3v1.5M5.5 6v4M7.5 6v4M3 3.5L3.5 11h6L10 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </button>
               </div>
             ))}
@@ -265,7 +285,7 @@ function WebhookCard({ provider, integration, onSave }: {
         </div>
       )}
 
-      {error && <p className="px-5 py-2 text-xs text-red-600 dark:text-red-400 border-t border-zinc-100 dark:border-zinc-800">{error}</p>}
+      {error && <p role="alert" className="px-5 py-2 text-xs text-red-600 dark:text-red-400 border-t border-zinc-100 dark:border-zinc-800">{error}</p>}
 
       <div className="border-t border-zinc-100 dark:border-zinc-800 px-5 py-3">
         <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">Notify on</p>
@@ -285,7 +305,7 @@ function WebhookCard({ provider, integration, onSave }: {
   );
 }
 
-export function IntegrationsPage({ team, currentUserId }: Props) {
+export function IntegrationsPage({ team, currentUserId, onOpenProject }: Props) {
   const role = team.members.find(m => m.id === currentUserId)?.role;
   // The backend returns 403 for everyone else, so don't ask.
   const isAdmin = role === 'owner' || role === 'admin';
@@ -304,12 +324,16 @@ export function IntegrationsPage({ team, currentUserId }: Props) {
             <p className="text-sm text-zinc-500 dark:text-zinc-400">Only team owners and admins can manage integrations.</p>
           </div>
         ) : loading ? (
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading…</p>
+          <>
+            <IntegrationCardSkeleton />
+            <IntegrationCardSkeleton />
+            <IntegrationCardSkeleton />
+          </>
         ) : error ? (
-          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          <ErrorState message={error} fill={false} />
         ) : (
           <>
-            <GitHubCard teamId={team.id} projects={team.projects} />
+            <GitHubCard teamId={team.id} projects={team.projects} onOpenProject={onOpenProject} />
             <WebhookCard provider="slack" integration={integration} onSave={save} />
             <WebhookCard provider="discord" integration={integration} onSave={save} />
 

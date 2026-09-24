@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import type { Ticket, Priority, TicketStatus, TicketType, Sprint } from '@/types';
+import type { EpicSummary, Ticket, Priority, TicketStatus, TicketType, Sprint } from '@/types';
 import { Avatar } from '@/components/layout/AppShell';
+import { EpicTag } from '@/components/tickets/EpicTag';
 
 interface Props {
   tickets: Ticket[];
+  epicById: Record<string, EpicSummary>;
   openSprints: Sprint[];
   onTicketClick: (id: string) => void;
   onCreateTicket: (title: string, type: TicketType) => void;
@@ -49,7 +51,7 @@ function StatusDot({ status }: { status: TicketStatus }) {
   );
 }
 
-export function BacklogView({ tickets, openSprints, onTicketClick, onCreateTicket, onAddToSprint }: Props) {
+export function BacklogView({ tickets, epicById, openSprints, onTicketClick, onCreateTicket, onAddToSprint }: Props) {
   const [filter, setFilter] = useState<'all' | 'unassigned'>('all');
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
@@ -113,8 +115,8 @@ export function BacklogView({ tickets, openSprints, onTicketClick, onCreateTicke
               className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors">
               Create
             </button>
-            <button onClick={() => setCreating(false)} className="px-1.5 py-1.5 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200">
-              <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+            <button onClick={() => setCreating(false)} aria-label="Cancel new ticket" className="px-1.5 py-1.5 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200">
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
             </button>
           </div>
         ) : (
@@ -161,6 +163,7 @@ export function BacklogView({ tickets, openSprints, onTicketClick, onCreateTicke
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-[11px] font-mono text-zinc-400 dark:text-zinc-500">{ticket.key}</span>
+                    {ticket.parentEpicId && epicById[ticket.parentEpicId] && <EpicTag epic={epicById[ticket.parentEpicId]} />}
                     {ticket.labels.slice(0, 2).map(l => (
                       <span key={l.id} className="px-1.5 py-0 rounded text-[10px] font-medium" style={{ backgroundColor: l.color + '20', color: l.color }}>{l.name}</span>
                     ))}
@@ -177,6 +180,7 @@ export function BacklogView({ tickets, openSprints, onTicketClick, onCreateTicke
               <span className="hidden md:block text-[11px] font-mono text-zinc-400 dark:text-zinc-500 w-16">{ticket.key}</span>
               <div className="hidden md:flex items-center gap-2 flex-1 min-w-0">
                 <p className="text-sm text-zinc-800 dark:text-zinc-200 truncate group-hover:text-zinc-900 dark:group-hover:text-zinc-100">{ticket.title}</p>
+                {ticket.parentEpicId && epicById[ticket.parentEpicId] && <EpicTag epic={epicById[ticket.parentEpicId]} />}
                 {ticket.labels.slice(0, 2).map(l => (
                   <span key={l.id} className="px-1.5 py-0.5 rounded text-[10px] font-medium flex-shrink-0" style={{ backgroundColor: l.color + '20', color: l.color }}>{l.name}</span>
                 ))}

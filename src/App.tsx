@@ -8,6 +8,7 @@ import { initAuth, logout } from '@/api/client';
 import { getMe, type CoreUser } from '@/api/users';
 import { ProfilePage } from '@/components/profile/ProfilePage';
 import { MembersPage } from '@/components/projects/MembersPage';
+import { ProjectSettingsPage } from '@/components/projects/ProjectSettingsPage';
 import { useTeamsData } from '@/hooks/useTeamsData';
 import { useNotifications } from '@/hooks/useNotifications';
 import { colorFor, initialsFor } from '@/lib/avatar';
@@ -208,6 +209,8 @@ export default function App() {
         if (!project) return <NoProjectsYet />;
         return (
           <ProjectPage
+            teamName={currentTeam.name}
+            onGoToTeam={() => goTo({ screen: 'team', teamId: view.teamId })}
             teamId={view.teamId}
             project={project}
             currentUserId={me?.id ?? ''}
@@ -215,38 +218,67 @@ export default function App() {
             deepLinkTicketId={view.ticketId}
             onTabChange={(tab: TabType) => goTo({ ...view, tab, ticketId: undefined })}
             onCloseDeepLink={() => navigate(viewToPath({ ...view, ticketId: undefined }), { replace: true })}
+            onCorrectDeepLinkTab={(tab: TabType) => navigate(viewToPath({ ...view, tab }), { replace: true })}
+            onOpenReports={() => goTo({ screen: 'reports', teamId: view.teamId, projectId: view.projectId })}
+            onOpenSettings={() => goTo({ screen: 'labels', teamId: view.teamId, projectId: view.projectId })}
           />
         );
       }
-      if (view.screen === 'labels') {
-        const project = getProject(view.teamId, view.projectId);
-        if (!project) return <NoProjectsYet />;
-        return <LabelsPage teamId={view.teamId} project={project} />;
-      }
-      if (view.screen === 'members') {
+      if (view.screen === 'labels' || view.screen === 'members') {
         const project = getProject(view.teamId, view.projectId);
         if (!project) return <NoProjectsYet />;
         return (
-          <MembersPage
-            team={currentTeam}
+          <ProjectSettingsPage
+            teamName={currentTeam.name}
+            onGoToTeam={() => goTo({ screen: 'team', teamId: view.teamId })}
             project={project}
-            currentUserId={me?.id ?? ''}
-            onAdd={(userId, role) => addProjectMember(currentTeam.id, project.id, userId, role)}
-            onChangeRole={(userId, role) => changeProjectMemberRole(currentTeam.id, project.id, userId, role)}
-            onRemove={(userId) => removeProjectMember(currentTeam.id, project.id, userId)}
-          />
+            activeTab={view.screen}
+            onTabChange={tab => goTo({ screen: tab, teamId: view.teamId, projectId: view.projectId })}
+            onNavigateProjectTab={tab => goTo({ screen: 'project', teamId: view.teamId, projectId: view.projectId, tab })}
+            onOpenReports={() => goTo({ screen: 'reports', teamId: view.teamId, projectId: view.projectId })}>
+            {view.screen === 'labels' ? (
+              <LabelsPage teamId={view.teamId} project={project} />
+            ) : (
+              <MembersPage
+                team={currentTeam}
+                project={project}
+                currentUserId={me?.id ?? ''}
+                onAdd={(userId, role) => addProjectMember(currentTeam.id, project.id, userId, role)}
+                onChangeRole={(userId, role) => changeProjectMemberRole(currentTeam.id, project.id, userId, role)}
+                onRemove={(userId) => removeProjectMember(currentTeam.id, project.id, userId)}
+                onGoToTeam={() => goTo({ screen: 'team', teamId: view.teamId })}
+              />
+            )}
+          </ProjectSettingsPage>
         );
       }
       if (view.screen === 'reports') {
         const project = getProject(view.teamId, view.projectId);
         if (!project) return <NoProjectsYet />;
-        return <ReportsPage teamId={view.teamId} project={project} currentUserId={me?.id ?? ''} />;
+        return (
+          <ReportsPage
+            teamName={currentTeam.name}
+            onGoToTeam={() => goTo({ screen: 'team', teamId: view.teamId })}
+            teamId={view.teamId}
+            project={project}
+            currentUserId={me?.id ?? ''}
+            onNavigateProjectTab={tab => goTo({ screen: 'project', teamId: view.teamId, projectId: view.projectId, tab })}
+            onOpenSettings={() => goTo({ screen: 'labels', teamId: view.teamId, projectId: view.projectId })}
+          />
+        );
       }
       if (view.screen === 'profile') {
         return <ProfilePage onSaved={profile => setMe(toUser(profile))} />;
       }
       if (view.screen === 'integrations') {
-        return <IntegrationsPage key={currentTeam.id} team={currentTeam} currentUserId={me?.id ?? ''} />;
+        return (
+          <IntegrationsPage
+            key={currentTeam.id}
+            team={currentTeam}
+            currentUserId={me?.id ?? ''}
+            onOpenProject={(projectId) => goTo({ screen: 'project', teamId: view.teamId, projectId, tab: 'board' })}
+          />
+        );
       }
       return null;
     }

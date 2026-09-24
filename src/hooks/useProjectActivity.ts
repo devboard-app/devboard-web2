@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { User } from '@/types';
 import { getActivity, type ActivityEvent } from '@/api/reports';
 import { useActorLookup } from './useActorLookup';
@@ -12,6 +12,8 @@ export function useProjectActivity(projectId: string, members: User[]) {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+  const refetch = useCallback(() => setReloadToken(t => t + 1), []);
   const { resolve, reset, userFor } = useActorLookup(members);
 
   useEffect(() => {
@@ -33,9 +35,9 @@ export function useProjectActivity(projectId: string, members: User[]) {
 
     return () => { cancelled = true; };
     // `resolve` depends on `members`, which is a fresh array whenever teams reload; the
-    // feed itself only needs to reload when the project changes.
+    // feed itself only needs to reload when the project changes (or `refetch` is called).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+  }, [projectId, reloadToken]);
 
   async function loadMore() {
     setLoadingMore(true);
@@ -52,5 +54,5 @@ export function useProjectActivity(projectId: string, members: User[]) {
     }
   }
 
-  return { events, total, loading, loadingMore, error, loadMore, userFor };
+  return { events, total, loading, loadingMore, error, loadMore, refetch, userFor };
 }

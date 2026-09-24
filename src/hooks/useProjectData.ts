@@ -32,6 +32,7 @@ function toTicket(api: ApiTicketListItem | ApiTicket, membersById: Record<string
     updatedAt: full.updated_at ?? '',
     storyPoints: api.story_points ?? undefined,
     dueDate: api.due_date ?? undefined,
+    parentEpicId: full.parent_epic ?? undefined,
   };
 }
 
@@ -102,8 +103,12 @@ export function useProjectData(teamId: string, projectId: string, projectMembers
 
   const refetch = useCallback(() => setReloadToken(t => t + 1), []);
 
-  async function createTicket(input: CreateTicketInput) {
-    await apiCreateTicket(teamId, projectId, input);
+  // `sprintId` lets a caller (the Board, which only ever shows the active sprint)
+  // put a freshly created ticket straight into that sprint instead of leaving it
+  // in the backlog, where it wouldn't show up on the board it was created from.
+  async function createTicket(input: CreateTicketInput, sprintId?: string) {
+    const ticket = await apiCreateTicket(teamId, projectId, input);
+    if (sprintId) await apiAddTicketToSprint(teamId, projectId, sprintId, ticket.id);
     refetch();
   }
 

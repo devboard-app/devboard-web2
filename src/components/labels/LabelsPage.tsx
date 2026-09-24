@@ -2,6 +2,8 @@ import { useState } from 'react';
 import type { Project } from '@/types';
 import { useProjectLabels } from '@/hooks/useProjectLabels';
 import { ApiError } from '@/api/client';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { ListSkeleton } from '@/components/ui/ListSkeleton';
 
 interface Props {
   teamId: string;
@@ -17,7 +19,7 @@ function errorMessage(err: unknown, fallback: string): string {
 
 function ColorSwatch({ color, selected, onClick }: { color: string; selected: boolean; onClick: () => void }) {
   return (
-    <button onClick={onClick}
+    <button onClick={onClick} type="button" aria-label={`Color ${color}`} aria-pressed={selected}
       className={`w-6 h-6 rounded-full transition-transform hover:scale-110 ${selected ? 'ring-2 ring-offset-2 ring-zinc-400 dark:ring-zinc-600 scale-110' : ''}`}
       style={{ backgroundColor: color }}
     />
@@ -35,6 +37,7 @@ export function LabelsPage({ teamId, project }: Props) {
   const [newName, setNewName] = useState('');
   const [newColor, setNewColor] = useState('#6366F1');
   const [actionError, setActionError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   function startEdit(label: { id: string; name: string; color: string }) {
     setEditingId(label.id);
@@ -45,20 +48,26 @@ export function LabelsPage({ teamId, project }: Props) {
   async function commitEdit() {
     if (!editingId) return;
     setActionError(null);
+    setBusyId(editingId);
     try {
       await apiUpdateLabel(editingId, { name: editName, color: editColor });
       setEditingId(null);
     } catch (err) {
       setActionError(errorMessage(err, 'Could not save label.'));
+    } finally {
+      setBusyId(null);
     }
   }
 
   async function deleteLabel(id: string) {
     setActionError(null);
+    setBusyId(id);
     try {
       await apiDeleteLabel(id);
     } catch (err) {
       setActionError(errorMessage(err, 'Could not delete label.'));
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -92,13 +101,13 @@ export function LabelsPage({ teamId, project }: Props) {
         </div>
 
         {actionError && (
-          <div className="mb-4 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900 text-sm text-red-700 dark:text-red-400">
+          <div role="alert" className="mb-4 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900 text-sm text-red-700 dark:text-red-400">
             {actionError}
           </div>
         )}
 
         {loadError && (
-          <div className="mb-4 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900 text-sm text-red-700 dark:text-red-400">
+          <div role="alert" className="mb-4 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900 text-sm text-red-700 dark:text-red-400">
             {loadError}
           </div>
         )}
@@ -109,8 +118,9 @@ export function LabelsPage({ teamId, project }: Props) {
             <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-3">New label</p>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">Name</label>
+                <label htmlFor="new-label-name" className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">Name</label>
                 <input
+                  id="new-label-name"
                   autoFocus
                   type="text" value={newName} onChange={e => setNewName(e.target.value)}
                   placeholder="e.g. bug, feature, help-wanted"
@@ -156,22 +166,19 @@ export function LabelsPage({ teamId, project }: Props) {
 
         {/* Labels list */}
         {loading && labels.length === 0 ? (
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center py-16">Loading…</p>
+          <ListSkeleton rows={4} />
         ) : labels.length === 0 && !creating ? (
-          <div className="text-center py-16 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800">
-            <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mx-auto mb-3">
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="text-zinc-400">
+          <EmptyState
+            icon={
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                 <path d="M3 7.5L10 2l7 5.5v9a1 1 0 01-1 1H4a1 1 0 01-1-1v-9z" stroke="currentColor" strokeWidth="1.3" />
                 <path d="M7.5 16V10h5v6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
               </svg>
-            </div>
-            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">No labels yet</p>
-            <p className="text-xs text-zinc-400 dark:text-zinc-600 mt-1 mb-4">Labels help categorize and filter tickets</p>
-            <button onClick={() => setCreating(true)}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors">
-              Create first label
-            </button>
-          </div>
+            }
+            title="No labels yet"
+            description="Labels help categorize and filter tickets"
+            action={{ label: 'Create first label', onClick: () => setCreating(true) }}
+          />
         ) : (
           <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
             {labels.map(label => (
@@ -189,12 +196,12 @@ export function LabelsPage({ teamId, project }: Props) {
                       className="flex-1 px-2 py-1 text-sm rounded border border-indigo-400 dark:border-indigo-600 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none"
                       onKeyDown={e => { if (e.key === 'Enter') void commitEdit(); if (e.key === 'Escape') setEditingId(null); }}
                     />
-                    <button onClick={() => void commitEdit()}
-                      className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors">
-                      Save
+                    <button onClick={() => void commitEdit()} disabled={busyId === label.id}
+                      className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-xs font-medium rounded-lg transition-colors">
+                      {busyId === label.id ? 'Saving…' : 'Save'}
                     </button>
-                    <button onClick={() => setEditingId(null)} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
-                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                    <button onClick={() => setEditingId(null)} disabled={busyId === label.id} aria-label="Cancel editing label" className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors disabled:opacity-60">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
                     </button>
                   </>
                 ) : (
@@ -204,16 +211,16 @@ export function LabelsPage({ teamId, project }: Props) {
                       style={{ backgroundColor: label.color + '22', color: label.color }}>
                       {label.name}
                     </span>
-                    <span className="text-xs text-zinc-400 dark:text-zinc-500 flex-shrink-0">{label.color}</span>
+                    <span className="text-xs text-zinc-500 dark:text-zinc-400 flex-shrink-0">{label.color}</span>
 
-                    <div className="ml-auto hidden group-hover:flex items-center gap-1">
-                      <button onClick={() => startEdit(label)}
-                        className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors">
-                        <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 11L2 8.5L9.5 1 12 3.5 4.5 11H2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg>
+                    <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
+                      <button onClick={() => startEdit(label)} disabled={busyId === label.id} aria-label={`Edit label ${label.name}`}
+                        className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors disabled:opacity-40">
+                        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M2 11L2 8.5L9.5 1 12 3.5 4.5 11H2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg>
                       </button>
-                      <button onClick={() => void deleteLabel(label.id)}
-                        className="p-1.5 text-zinc-400 hover:text-red-500 dark:hover:text-red-400 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors">
-                        <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 3.5h9M5 3.5V2h3v1.5M5.5 6v4M7.5 6v4M3 3.5L3.5 11h6L10 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                      <button onClick={() => void deleteLabel(label.id)} disabled={busyId === label.id} aria-label={`Delete label ${label.name}`}
+                        className="p-2 text-zinc-400 hover:text-red-500 dark:hover:text-red-400 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors disabled:opacity-40">
+                        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M2 3.5h9M5 3.5V2h3v1.5M5.5 6v4M7.5 6v4M3 3.5L3.5 11h6L10 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                       </button>
                     </div>
                   </>

@@ -15,7 +15,7 @@ export function ChatPanel({ projectId, projectName }: { projectId: string; proje
   }
 
   return (
-    <div className="max-w-2xl bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 flex flex-col h-96">
+    <div className="h-full flex flex-col">
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.length === 0 && (
           <p className="text-sm text-zinc-400 dark:text-zinc-500">Ask about velocity, burndown, or who's been active.</p>

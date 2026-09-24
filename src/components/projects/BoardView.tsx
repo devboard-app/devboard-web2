@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import type { Ticket, TicketStatus, TicketType } from '@/types';
+import type { EpicSummary, Ticket, TicketStatus, TicketType } from '@/types';
 import { Avatar } from '@/components/layout/AppShell';
+import { EpicTag } from '@/components/tickets/EpicTag';
 
 interface Props {
   columns: Record<TicketStatus, Ticket[]>;
+  epicById: Record<string, EpicSummary>;
   onTicketClick: (id: string) => void;
   onStatusChange: (ticketId: string, status: TicketStatus) => void;
   onCreateTicket: (status: TicketStatus, title: string, type: TicketType) => void;
@@ -26,7 +28,7 @@ const priorityDot: Record<string, string> = {
   low: 'bg-zinc-300 dark:bg-zinc-600',
 };
 
-function TicketCard({ ticket, onClick, onDragStart }: { ticket: Ticket; onClick: () => void; onDragStart: () => void }) {
+function TicketCard({ ticket, epic, onClick, onDragStart }: { ticket: Ticket; epic?: EpicSummary; onClick: () => void; onDragStart: () => void }) {
   return (
     <div
       draggable
@@ -37,6 +39,7 @@ function TicketCard({ ticket, onClick, onDragStart }: { ticket: Ticket; onClick:
       <div className="flex items-center gap-1.5 mb-2">
         <span className="text-[11px] font-mono text-zinc-400 dark:text-zinc-500">{ticket.key}</span>
         <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${priorityDot[ticket.priority]}`} title={ticket.priority} />
+        {epic && <EpicTag epic={epic} />}
       </div>
 
       {/* Title */}
@@ -83,7 +86,7 @@ function TicketCard({ ticket, onClick, onDragStart }: { ticket: Ticket; onClick:
   );
 }
 
-export function BoardView({ columns, onTicketClick, onStatusChange, onCreateTicket }: Props) {
+export function BoardView({ columns, epicById, onTicketClick, onStatusChange, onCreateTicket }: Props) {
   const [dragging, setDragging] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<TicketStatus | null>(null);
   const [newTicketCol, setNewTicketCol] = useState<TicketStatus | null>(null);
@@ -145,6 +148,7 @@ export function BoardView({ columns, onTicketClick, onStatusChange, onCreateTick
                   <TicketCard
                     key={ticket.id}
                     ticket={ticket}
+                    epic={ticket.parentEpicId ? epicById[ticket.parentEpicId] : undefined}
                     onClick={() => onTicketClick(ticket.id)}
                     onDragStart={() => setDragging(ticket.id)}
                   />

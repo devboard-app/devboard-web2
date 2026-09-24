@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Ticket, TicketStatus, TicketType, Priority, User, Label, Comment } from '@/types';
+import type { Ticket, TicketStatus, TicketType, Priority, User, Label, Comment, EpicSummary } from '@/types';
 import { STORY_POINTS } from '@/types';
-import type { UpdateTicketInput } from '@/api/tickets';
+import { listTickets, type ApiTicketListItem, type UpdateTicketInput } from '@/api/tickets';
 import { ApiError } from '@/api/client';
 import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENT_SIZE_BYTES, deleteAttachment } from '@/api/attachments';
 import { useTicketComments } from '@/hooks/useTicketComments';
 import { useTicketActivity } from '@/hooks/useTicketActivity';
 import { ActivityRow } from '@/components/activity/ActivityRow';
 import { Avatar } from '@/components/layout/AppShell';
+import { LoadingState } from '@/components/ui/LoadingState';
 
 interface Props {
   teamId: string;
@@ -18,10 +19,63 @@ interface Props {
   isLead: boolean;
   projectLabels: Label[];
   onCreateProjectLabel: (name: string, color?: string) => Promise<void>;
+  /** Other epic-type tickets in this project, for the "Epic" picker. Empty if this ticket is itself an epic. */
+  projectEpics: EpicSummary[];
   onClose: () => void;
   onCommit: (patch: UpdateTicketInput) => void;
   onAddLabel: (labelId: string) => Promise<void>;
   onRemoveLabel: (labelId: string) => Promise<void>;
+  /** Jumps to the project's Labels settings screen (and closes this panel). Omitted where that navigation isn't available. */
+  onManageLabels?: () => void;
+  /** Switches the panel to show a different ticket — used by an epic's "Linked tickets" list. */
+  onOpenTicket: (ticketId: string) => void;
+}
+
+const childStatusDot: Record<TicketStatus, string> = {
+  backlog: 'bg-zinc-300 dark:bg-zinc-700',
+  todo: 'bg-zinc-400',
+  in_progress: 'bg-blue-500',
+  in_review: 'bg-amber-500',
+  done: 'bg-emerald-500',
+};
+
+/** Lists the tickets scoped under an epic, fetched fresh whenever the epic (or its linked set) changes. */
+function EpicChildren({ teamId, projectId, epicId, onOpenTicket }: { teamId: string; projectId: string; epicId: string; onOpenTicket: (id: string) => void }) {
+  const [children, setChildren] = useState<ApiTicketListItem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setChildren(null);
+    setError(null);
+    listTickets(teamId, projectId, { parent_epic: epicId })
+      .then(page => { if (!cancelled) setChildren(page.results); })
+      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load linked tickets'); });
+    return () => { cancelled = true; };
+  }, [teamId, projectId, epicId]);
+
+  return (
+    <div className="mb-5">
+      <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-2">Linked tickets{children ? ` (${children.length})` : ''}</p>
+      {error && <p role="alert" className="text-xs text-red-600 dark:text-red-400 mb-1.5">{error}</p>}
+      {children === null && !error && <LoadingState fill={false} />}
+      {children && children.length === 0 && (
+        <p className="text-xs text-zinc-400 dark:text-zinc-600">No tickets are linked to this epic yet — set it as the Epic on another ticket.</p>
+      )}
+      {children && children.length > 0 && (
+        <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
+          {children.map(t => (
+            <button key={t.id} onClick={() => onOpenTicket(t.id)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${childStatusDot[t.status]}`} />
+              <span className="text-[11px] font-mono text-zinc-400 dark:text-zinc-500 flex-shrink-0">{t.key}</span>
+              <span className="flex-1 text-xs text-zinc-700 dark:text-zinc-300 truncate">{t.title}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 const statusOptions: { value: TicketStatus; label: string; color: string }[] = [
@@ -49,8 +103,8 @@ function errorMessage(err: unknown, fallback: string): string {
 function TicketActivityTab({ projectId, ticketId, members, isLead }: { projectId: string; ticketId: string; members: User[]; isLead: boolean }) {
   const { events, truncated, loading, error, userFor } = useTicketActivity(projectId, ticketId, members);
 
-  if (loading) return <p className="text-sm text-zinc-400 dark:text-zinc-600 text-center py-8">Loading…</p>;
-  if (error) return <p className="text-sm text-red-600 dark:text-red-400 py-4">{error}</p>;
+  if (loading) return <LoadingState fill={false} />;
+  if (error) return <p role="alert" className="text-sm text-red-600 dark:text-red-400 py-4">{error}</p>;
 
   return (
     <div>
@@ -68,8 +122,8 @@ function TicketActivityTab({ projectId, ticketId, members, isLead }: { projectId
 }
 
 export function TicketPanel({
-  teamId, projectId, ticket, projectMembers, isLead, projectLabels, onCreateProjectLabel,
-  onClose, onCommit, onAddLabel, onRemoveLabel,
+  teamId, projectId, ticket, projectMembers, isLead, projectLabels, onCreateProjectLabel, projectEpics,
+  onClose, onCommit, onAddLabel, onRemoveLabel, onManageLabels, onOpenTicket,
 }: Props) {
   const [local, setLocal] = useState<Ticket>(ticket);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -157,8 +211,8 @@ export function TicketPanel({
         <div className="flex items-center gap-3 px-5 py-3 border-b border-zinc-100 dark:border-zinc-800 flex-shrink-0">
           <span className="text-xs font-mono font-medium text-zinc-400 dark:text-zinc-500">{local.key}</span>
           <div className="flex items-center gap-1 ml-auto">
-            <button onClick={onClose} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+            <button onClick={onClose} aria-label="Close ticket" className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
             </button>
           </div>
         </div>
@@ -269,11 +323,41 @@ export function TicketPanel({
                   {STORY_POINTS.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
+
+              {/* Epic (epics themselves don't nest under another epic) */}
+              {local.type !== 'epic' && (
+                <div>
+                  <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-1">Epic</p>
+                  <select
+                    value={local.parentEpicId ?? ''}
+                    onChange={e => {
+                      const value = e.target.value || undefined;
+                      setField({ parentEpicId: value });
+                      commit({ parent_epic: value ?? null });
+                    }}
+                    className="text-xs px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 max-w-full">
+                    <option value="">No epic</option>
+                    {projectEpics.map(e => <option key={e.id} value={e.id}>{e.key} · {e.title}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
+
+            {/* Linked tickets (only epics have children) */}
+            {local.type === 'epic' && (
+              <EpicChildren teamId={teamId} projectId={projectId} epicId={local.id} onOpenTicket={onOpenTicket} />
+            )}
 
             {/* Labels */}
             <div className="mb-5">
-              <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-2">Labels</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs text-zinc-400 dark:text-zinc-500">Labels</p>
+                {onManageLabels && (
+                  <button onClick={onManageLabels} className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline">
+                    Manage labels
+                  </button>
+                )}
+              </div>
               {labelActionError && <p className="text-xs text-red-600 dark:text-red-400 mb-1.5">{labelActionError}</p>}
               <div className="flex flex-wrap items-center gap-1.5">
                 {local.labels.length === 0 && <span className="text-xs text-zinc-400 dark:text-zinc-600">No labels</span>}
@@ -574,8 +658,9 @@ function AttachmentsTab({ items }: { items: { attachment: Comment['attachments']
             <p className="text-xs text-zinc-400 dark:text-zinc-600">{formatSize(attachment.size)} · from {comment.author.username}'s comment</p>
           </a>
           <button onClick={() => void handleDelete(attachment.id)} disabled={deleting === attachment.id}
+            aria-label={`Delete attachment ${attachment.filename}`}
             className="p-1.5 text-zinc-400 hover:text-red-500 dark:hover:text-red-400 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors disabled:opacity-50">
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 3.5h9M5 3.5V2h3v1.5M5.5 6v4M7.5 6v4M3 3.5L3.5 11h6L10 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M2 3.5h9M5 3.5V2h3v1.5M5.5 6v4M7.5 6v4M3 3.5L3.5 11h6L10 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </button>
         </div>
       ))}

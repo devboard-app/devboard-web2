@@ -114,14 +114,6 @@ export function AppShell({ teams, view, notifications, currentUser, isDark, onNa
       onClick: () => { onNavigate({ screen: 'team', teamId: currentTeam.id }); setMobileMenuOpen(false); },
     },
     {
-      label: 'Reports',
-      icon: (
-        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><rect x="1" y="8" width="3" height="6" rx="0.5" stroke="currentColor" strokeWidth="1.2" /><rect x="6" y="5" width="3" height="9" rx="0.5" stroke="currentColor" strokeWidth="1.2" /><rect x="11" y="2" width="3" height="12" rx="0.5" stroke="currentColor" strokeWidth="1.2" /></svg>
-      ),
-      active: view.screen === 'reports',
-      onClick: () => { if (activeProjectId) onNavigate({ screen: 'reports', teamId: currentTeam.id, projectId: activeProjectId }); setMobileMenuOpen(false); },
-    },
-    {
       label: 'Integrations',
       icon: (
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M5.5 2.5v10M9.5 2.5v10M2.5 5.5h10M2.5 9.5h10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /></svg>
@@ -138,6 +130,7 @@ export function AppShell({ teams, view, notifications, currentUser, isDark, onNa
         <div className="relative">
           <button
             onClick={() => setTeamMenuOpen(v => !v)}
+            aria-haspopup="true" aria-expanded={teamMenuOpen} aria-label={`Switch team, current: ${currentTeam.name}`}
             className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors group">
             <div className="w-6 h-6 rounded-md flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
               style={{ backgroundColor: currentTeam.avatarColor }}>
@@ -166,8 +159,9 @@ export function AppShell({ teams, view, notifications, currentUser, isDark, onNa
               <div className="border-t border-zinc-100 dark:border-zinc-800">
                 {newTeamOpen ? (
                   <form onSubmit={handleCreateTeam} className="p-3 space-y-2" onClick={e => e.stopPropagation()}>
-                    {newTeamError && <p className="text-xs text-red-600 dark:text-red-400">{newTeamError}</p>}
-                    <input autoFocus type="text" required value={newTeamName} onChange={e => setNewTeamName(e.target.value)}
+                    {newTeamError && <p className="text-xs text-red-600 dark:text-red-400" role="alert">{newTeamError}</p>}
+                    <label htmlFor="new-team-name" className="sr-only">Team name</label>
+                    <input id="new-team-name" autoFocus type="text" required value={newTeamName} onChange={e => setNewTeamName(e.target.value)}
                       placeholder="Team name"
                       className="w-full px-2.5 py-1.5 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                     <div className="flex gap-1.5">
@@ -184,7 +178,7 @@ export function AppShell({ teams, view, notifications, currentUser, isDark, onNa
                 ) : (
                   <button onClick={() => setNewTeamOpen(true)}
                     className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
-                    <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M7.5 3v9M3 7.5h9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true"><path d="M7.5 3v9M3 7.5h9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
                     New team
                   </button>
                 )}
@@ -227,7 +221,7 @@ export function AppShell({ teams, view, notifications, currentUser, isDark, onNa
               <span className="truncate flex-1 text-left">{project.name}</span>
             </button>
             {/* Sub-nav when project active */}
-            {activeProjectId === project.id && (view.screen === 'project' || view.screen === 'labels' || view.screen === 'members') && (
+            {activeProjectId === project.id && (view.screen === 'project' || view.screen === 'reports' || view.screen === 'labels' || view.screen === 'members') && (
               <div className="ml-6 mb-1">
                 {(['board', 'backlog', 'sprints'] as TabType[]).map(tab => (
                   <button key={tab} onClick={() => navToProject(currentTeam.id, project.id, tab)}
@@ -239,17 +233,17 @@ export function AppShell({ teams, view, notifications, currentUser, isDark, onNa
                     {tab}
                   </button>
                 ))}
+                <button onClick={() => onNavigate({ screen: 'reports', teamId: currentTeam.id, projectId: project.id })}
+                  className={`w-full text-left px-2 py-1 rounded text-xs transition-colors ${
+                    (view as AppView).screen === 'reports' ? 'text-indigo-700 dark:text-indigo-400 font-medium' : 'text-zinc-500 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+                  }`}>
+                  Reports
+                </button>
                 <button onClick={() => onNavigate({ screen: 'labels', teamId: currentTeam.id, projectId: project.id })}
                   className={`w-full text-left px-2 py-1 rounded text-xs transition-colors ${
-                    (view as AppView).screen === 'labels' ? 'text-indigo-700 dark:text-indigo-400 font-medium' : 'text-zinc-500 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+                    (view as AppView).screen === 'labels' || (view as AppView).screen === 'members' ? 'text-indigo-700 dark:text-indigo-400 font-medium' : 'text-zinc-500 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
                   }`}>
-                  Labels
-                </button>
-                <button onClick={() => onNavigate({ screen: 'members', teamId: currentTeam.id, projectId: project.id })}
-                  className={`w-full text-left px-2 py-1 rounded text-xs transition-colors ${
-                    (view as AppView).screen === 'members' ? 'text-indigo-700 dark:text-indigo-400 font-medium' : 'text-zinc-500 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
-                  }`}>
-                  Members
+                  Settings
                 </button>
               </div>
             )}
@@ -257,15 +251,17 @@ export function AppShell({ teams, view, notifications, currentUser, isDark, onNa
         ))}
         {newProjectOpen ? (
           <form onSubmit={e => void handleCreateProject(currentTeam.id, e)} className="px-2 py-2 space-y-2">
-            {newProjectError && <p className="text-xs text-red-600 dark:text-red-400">{newProjectError}</p>}
-            <input autoFocus type="text" required value={newProjectName}
+            {newProjectError && <p className="text-xs text-red-600 dark:text-red-400" role="alert">{newProjectError}</p>}
+            <label htmlFor="new-project-name" className="sr-only">Project name</label>
+            <input id="new-project-name" autoFocus type="text" required value={newProjectName}
               onChange={e => {
                 setNewProjectName(e.target.value);
                 if (!keyTouched) setNewProjectKey(suggestKey(e.target.value));
               }}
               placeholder="Project name"
               className="w-full px-2.5 py-1.5 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-            <input type="text" required pattern="[A-Z0-9]{2,10}" title="2-10 uppercase letters/numbers" value={newProjectKey}
+            <label htmlFor="new-project-key" className="sr-only">Project key (2-10 uppercase letters/numbers)</label>
+            <input id="new-project-key" type="text" required pattern="[A-Z0-9]{2,10}" title="2-10 uppercase letters/numbers" value={newProjectKey}
               onChange={e => { setKeyTouched(true); setNewProjectKey(e.target.value.toUpperCase()); }}
               placeholder="KEY"
               className="w-full px-2.5 py-1.5 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 uppercase" />
@@ -293,12 +289,14 @@ export function AppShell({ teams, view, notifications, currentUser, isDark, onNa
       <div className="px-3 py-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center gap-2">
         {/* Notifications */}
         <button onClick={onShowNotifications}
+          aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+          aria-haspopup="true" aria-expanded={showNotifications}
           className="relative p-1.5 rounded-lg text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M8 2a4.5 4.5 0 00-4.5 4.5V9L2 11h12l-1.5-2V6.5A4.5 4.5 0 008 2zM6.5 13a1.5 1.5 0 003 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
           </svg>
           {unread > 0 && (
-            <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-indigo-600 rounded-full text-[9px] text-white font-bold flex items-center justify-center">
+            <span aria-hidden="true" className="absolute top-0.5 right-0.5 w-4 h-4 bg-indigo-600 rounded-full text-[9px] text-white font-bold flex items-center justify-center">
               {unread > 9 ? '9+' : unread}
             </span>
           )}
@@ -306,17 +304,21 @@ export function AppShell({ teams, view, notifications, currentUser, isDark, onNa
 
         {/* Dark mode toggle */}
         <button onClick={onToggleDark}
+          aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
           className="p-1.5 rounded-lg text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors">
           {isDark ? (
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.22 3.22l1.06 1.06M11.72 11.72l1.06 1.06M3.22 12.78l1.06-1.06M11.72 4.28l1.06-1.06" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.22 3.22l1.06 1.06M11.72 11.72l1.06 1.06M3.22 12.78l1.06-1.06M11.72 4.28l1.06-1.06" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
           ) : (
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 9.5A6 6 0 016.5 2.5a6 6 0 100 11 6 6 0 007-4z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 9.5A6 6 0 016.5 2.5a6 6 0 100 11 6 6 0 007-4z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
           )}
         </button>
 
         {/* Profile */}
         <div className="relative ml-auto">
-          <button onClick={() => setProfileMenuOpen(v => !v)} className="focus:outline-none">
+          <button onClick={() => setProfileMenuOpen(v => !v)}
+            aria-label={`Open profile menu for ${currentUser.username}`}
+            aria-haspopup="true" aria-expanded={profileMenuOpen}
+            className="focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-full">
             <Avatar user={currentUser} size="sm" />
           </button>
           {profileMenuOpen && (
@@ -371,8 +373,8 @@ export function AppShell({ teams, view, notifications, currentUser, isDark, onNa
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Mobile header */}
         <header className="md:hidden flex items-center gap-3 px-4 py-3 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
-          <button onClick={() => setMobileMenuOpen(true)} className="p-1.5 text-zinc-500 dark:text-zinc-400">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 4h14M2 9h14M2 14h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+          <button onClick={() => setMobileMenuOpen(true)} aria-label="Open menu" className="p-1.5 text-zinc-500 dark:text-zinc-400">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true"><path d="M2 4h14M2 9h14M2 14h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
           </button>
           <div className="flex items-center gap-2">
             <div className="w-5 h-5 rounded bg-indigo-600 flex items-center justify-center">
@@ -381,9 +383,11 @@ export function AppShell({ teams, view, notifications, currentUser, isDark, onNa
             <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">DevBoard</span>
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <button onClick={onShowNotifications} className="relative p-1.5 text-zinc-500 dark:text-zinc-400">
-              <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M8 2a4.5 4.5 0 00-4.5 4.5V9L2 11h12l-1.5-2V6.5A4.5 4.5 0 008 2zM6.5 13a1.5 1.5 0 003 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
-              {unread > 0 && <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-indigo-600 rounded-full text-[8px] text-white font-bold flex items-center justify-center">{unread}</span>}
+            <button onClick={onShowNotifications}
+              aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+              className="relative p-1.5 text-zinc-500 dark:text-zinc-400">
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2a4.5 4.5 0 00-4.5 4.5V9L2 11h12l-1.5-2V6.5A4.5 4.5 0 008 2zM6.5 13a1.5 1.5 0 003 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+              {unread > 0 && <span aria-hidden="true" className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-indigo-600 rounded-full text-[8px] text-white font-bold flex items-center justify-center">{unread}</span>}
             </button>
             <Avatar user={currentUser} size="sm" />
           </div>

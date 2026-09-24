@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 /** Fetches once per `key` change. Each report tab mounts its own, so a tab only loads when opened. */
 export function useReport<T>(fetcher: () => Promise<T>, key: string) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+  const refetch = useCallback(() => setReloadToken(t => t + 1), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -18,9 +20,9 @@ export function useReport<T>(fetcher: () => Promise<T>, key: string) {
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
-    // `fetcher` is a fresh closure every render; `key` identifies what it fetches.
+    // `fetcher` is a fresh closure every render; `key`/`reloadToken` identify what and when to fetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, reloadToken]);
 
-  return { data, loading, error };
+  return { data, loading, error, refetch };
 }

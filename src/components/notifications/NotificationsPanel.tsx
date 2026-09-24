@@ -59,15 +59,15 @@ export function NotificationsPanel({ notifications, total, error, onClose, onMar
                 Mark all read
               </button>
             )}
-            <button onClick={onClose}
+            <button onClick={onClose} aria-label="Close notifications"
               className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
             </button>
           </div>
         </div>
 
         {error && (
-          <div className="px-5 py-2 bg-red-50 dark:bg-red-950 border-b border-red-200 dark:border-red-900 text-xs text-red-700 dark:text-red-400 flex-shrink-0">
+          <div role="alert" className="px-5 py-2 bg-red-50 dark:bg-red-950 border-b border-red-200 dark:border-red-900 text-xs text-red-700 dark:text-red-400 flex-shrink-0">
             {error}
           </div>
         )}
@@ -138,7 +138,10 @@ function NotifRow({ notif, onOpen, onDismiss }: { notif: Notification; onOpen: (
   return (
     <div
       onClick={() => onOpen(notif)}
-      className={`flex gap-3 px-5 py-3.5 border-b border-zinc-50 dark:border-zinc-800/50 cursor-pointer transition-colors group hover:bg-zinc-50 dark:hover:bg-zinc-800/50 ${
+      role="button" tabIndex={0}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(notif); } }}
+      aria-label={`${notif.read ? '' : 'Unread: '}${notif.message}`}
+      className={`flex gap-3 px-5 py-3.5 border-b border-zinc-50 dark:border-zinc-800/50 cursor-pointer transition-colors group hover:bg-zinc-50 dark:hover:bg-zinc-800/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 ${
         !notif.read ? 'bg-indigo-50/40 dark:bg-indigo-950/20' : ''
       }`}>
       <NotifIcon type={notif.type} />
@@ -158,8 +161,9 @@ function NotifRow({ notif, onOpen, onDismiss }: { notif: Notification; onOpen: (
       </div>
       <button
         onClick={e => { e.stopPropagation(); onDismiss(notif.id); }}
-        className="p-1 opacity-0 group-hover:opacity-100 text-zinc-300 dark:text-zinc-700 hover:text-zinc-500 dark:hover:text-zinc-400 transition-all flex-shrink-0 rounded">
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+        aria-label="Dismiss notification"
+        className="p-2 -m-1 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-zinc-400 dark:text-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300 transition-all flex-shrink-0 rounded">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
       </button>
     </div>
   );

@@ -42,6 +42,7 @@ export interface TicketFilters {
   priority?: ApiPriority;
   type?: ApiTicketType;
   label?: string;
+  parent_epic?: string;
 }
 
 export interface BoardResponse {
@@ -75,10 +76,10 @@ export interface CreateTicketInput {
   due_date?: string;
 }
 
-// PATCH-only: `assignee_id` can be explicitly nulled to unassign, which
-// CreateTicketInput's `string | undefined` can't express (undefined means
+// PATCH-only: `assignee_id`/`parent_epic` can be explicitly nulled to unassign/unlink,
+// which CreateTicketInput's `string | undefined` can't express (undefined means
 // "don't touch this field" everywhere else in this API layer).
-export type UpdateTicketInput = Partial<Omit<CreateTicketInput, 'assignee_id'>> & { assignee_id?: string | null };
+export type UpdateTicketInput = Partial<Omit<CreateTicketInput, 'assignee_id' | 'parent_epic'>> & { assignee_id?: string | null; parent_epic?: string | null };
 
 export const createTicket = (teamId: string, projectId: string, input: CreateTicketInput) =>
   apiPost<ApiTicket>(`${base(teamId, projectId)}/tickets/`, input);

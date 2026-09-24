@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import type { Sprint, Ticket, SprintStatus } from '@/types';
+import type { EpicSummary, Sprint, Ticket, SprintStatus } from '@/types';
+import { EpicTag } from '@/components/tickets/EpicTag';
 
 interface Props {
   sprints: Sprint[];
   sprintTickets: Record<string, Ticket[]>;
+  epicById: Record<string, EpicSummary>;
   onCreateSprint: (name: string, startDate?: string, endDate?: string) => void;
   onStartSprint: (sprintId: string) => void;
   onCompleteSprint: (sprintId: string) => void;
@@ -31,7 +33,7 @@ function SprintProgress({ tickets }: { tickets: Ticket[] }) {
   );
 }
 
-export function SprintsView({ sprints, sprintTickets, onCreateSprint, onStartSprint, onCompleteSprint, onRemoveFromSprint, onTicketClick }: Props) {
+export function SprintsView({ sprints, sprintTickets, epicById, onCreateSprint, onStartSprint, onCompleteSprint, onRemoveFromSprint, onTicketClick }: Props) {
   const [expanded, setExpanded] = useState<string | null>(sprints.find(s => s.status === 'active')?.id ?? null);
   const [creating, setCreating] = useState(false);
   const [newSprintName, setNewSprintName] = useState('');
@@ -81,8 +83,8 @@ export function SprintsView({ sprints, sprintTickets, onCreateSprint, onStartSpr
                 onKeyDown={e => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') setCreating(false); }}
               />
               <button onClick={handleCreate} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors">Create</button>
-              <button onClick={() => setCreating(false)} className="px-2 py-1.5 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+              <button onClick={() => setCreating(false)} aria-label="Cancel new sprint" className="px-2 py-1.5 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
               </button>
             </div>
             <div className="flex items-center gap-2 mt-2">
@@ -171,8 +173,8 @@ export function SprintsView({ sprints, sprintTickets, onCreateSprint, onStartSpr
                   <div className="border-t border-zinc-100 dark:border-zinc-800">
                     {tickets.length === 0 ? (
                       <div className="py-8 text-center">
-                        <p className="text-sm text-zinc-400 dark:text-zinc-600">No tickets in this sprint</p>
-                        <p className="text-xs text-zinc-300 dark:text-zinc-700 mt-1">Add tickets to this sprint from the Backlog view</p>
+                        <p className="text-sm text-zinc-500 dark:text-zinc-500">No tickets in this sprint</p>
+                        <p className="text-xs text-zinc-400 dark:text-zinc-600 mt-1">Add tickets to this sprint from the Backlog view</p>
                       </div>
                     ) : (
                       tickets.map((ticket, i) => (
@@ -190,6 +192,7 @@ export function SprintsView({ sprints, sprintTickets, onCreateSprint, onStartSpr
                             <span className="text-[11px] font-mono text-zinc-400 dark:text-zinc-500 flex-shrink-0 w-14">{ticket.key}</span>
                             <span className="flex-1 text-sm text-zinc-800 dark:text-zinc-200 truncate">{ticket.title}</span>
                             <div className="flex items-center gap-2 flex-shrink-0">
+                              {ticket.parentEpicId && epicById[ticket.parentEpicId] && <span className="hidden sm:inline"><EpicTag epic={epicById[ticket.parentEpicId]} /></span>}
                               {ticket.labels.slice(0, 1).map(l => (
                                 <span key={l.id} className="px-1.5 py-0.5 rounded text-[10px] font-medium hidden sm:inline" style={{ backgroundColor: l.color + '20', color: l.color }}>{l.name}</span>
                               ))}
@@ -197,9 +200,9 @@ export function SprintsView({ sprints, sprintTickets, onCreateSprint, onStartSpr
                             </div>
                           </button>
                           <button onClick={() => onRemoveFromSprint(sprint.id, ticket.id)}
-                            title="Remove from sprint"
-                            className="opacity-0 group-hover:opacity-100 p-1 rounded text-zinc-400 hover:text-red-500 dark:hover:text-red-400 transition-all flex-shrink-0">
-                            <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                            title="Remove from sprint" aria-label={`Remove ${ticket.title} from sprint`}
+                            className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-2 rounded text-zinc-400 hover:text-red-500 dark:hover:text-red-400 transition-all flex-shrink-0">
+                            <svg width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
                           </button>
                         </div>
                       ))

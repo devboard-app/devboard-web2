@@ -68,6 +68,15 @@ export interface Ticket {
   updatedAt: string;
   storyPoints?: number;
   dueDate?: string;
+  /** Set when this ticket is scoped under an epic (another ticket of type 'epic'). */
+  parentEpicId?: string;
+}
+
+/** Minimal shape used to populate the "Epic" picker on a ticket. */
+export interface EpicSummary {
+  id: string;
+  key: string;
+  title: string;
 }
 
 export interface Sprint {
