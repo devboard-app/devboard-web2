@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Team, Notification, AppView, TabType, User } from '@/types';
+import { EntityMark } from '@/components/ui/ImageField';
 
 interface Props {
   teams: Team[];
@@ -29,7 +30,10 @@ function Avatar({ user, size = 'sm' }: { user: User; size?: 'xs' | 'sm' | 'md' }
   const sz = size === 'xs' ? 'w-5 h-5 text-[10px]' : size === 'sm' ? 'w-7 h-7 text-xs' : 'w-9 h-9 text-sm';
   // A broken or blocked image falls back to initials instead of leaving a hole.
   const [imageFailed, setImageFailed] = useState(false);
-  const showImage = Boolean(user.avatar) && user.avatar!.startsWith('https://') && !imageFailed;
+  // A new avatar gets a fresh chance to load, even if the previous one failed.
+  useEffect(() => setImageFailed(false), [user.avatar]);
+  // http:// is allowed because uploaded avatars are served from MinIO, which is plain http in dev.
+  const showImage = Boolean(user.avatar) && /^https?:\/\//.test(user.avatar!) && !imageFailed;
   return (
     <div className={`${sz} rounded-full flex items-center justify-center font-semibold text-white flex-shrink-0 overflow-hidden`}
       style={{ backgroundColor: user.color }}>
@@ -98,6 +102,9 @@ export function AppShell({ teams, view, notifications, currentUser, isDark, onNa
   const unread = notifications.filter(n => !n.read).length;
 
   const currentTeam = teams.find(t => t.id === activeTeamId) ?? teams[0];
+  // Mirrors devboard-work: only team owners/admins create projects and manage integrations.
+  const myTeamRole = currentTeam.members.find(m => m.id === currentUser.id)?.role;
+  const isTeamAdmin = myTeamRole === 'owner' || myTeamRole === 'admin';
 
   function navToProject(teamId: string, projectId: string, tab: TabType = 'board') {
     onNavigate({ screen: 'project', teamId, projectId, tab });
@@ -113,14 +120,14 @@ export function AppShell({ teams, view, notifications, currentUser, isDark, onNa
       active: view.screen === 'team',
       onClick: () => { onNavigate({ screen: 'team', teamId: currentTeam.id }); setMobileMenuOpen(false); },
     },
-    {
+    ...(!isTeamAdmin ? [] : [{
       label: 'Integrations',
       icon: (
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M5.5 2.5v10M9.5 2.5v10M2.5 5.5h10M2.5 9.5h10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /></svg>
       ),
       active: view.screen === 'integrations',
       onClick: () => { onNavigate({ screen: 'integrations', teamId: currentTeam.id }); setMobileMenuOpen(false); },
-    },
+    }]),
   ];
 
   const sidebar = (
@@ -132,10 +139,9 @@ export function AppShell({ teams, view, notifications, currentUser, isDark, onNa
             onClick={() => setTeamMenuOpen(v => !v)}
             aria-haspopup="true" aria-expanded={teamMenuOpen} aria-label={`Switch team, current: ${currentTeam.name}`}
             className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors group">
-            <div className="w-6 h-6 rounded-md flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-              style={{ backgroundColor: currentTeam.avatarColor }}>
-              {currentTeam.name[0]}
-            </div>
+            <EntityMark url={currentTeam.avatar} fallback={currentTeam.name[0]}
+              className="w-6 h-6 rounded-md flex items-center justify-center text-white text-xs font-bold"
+              style={{ backgroundColor: currentTeam.avatarColor }} />
             <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200 truncate flex-1 text-left">{currentTeam.name}</span>
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-zinc-400 flex-shrink-0">
               <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -146,8 +152,9 @@ export function AppShell({ teams, view, notifications, currentUser, isDark, onNa
               {teams.map(team => (
                 <button key={team.id} onClick={() => { onNavigate({ screen: 'team', teamId: team.id }); setTeamMenuOpen(false); }}
                   className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
-                  <div className="w-5 h-5 rounded flex items-center justify-center text-white text-xs font-bold"
-                    style={{ backgroundColor: team.avatarColor }}>{team.name[0]}</div>
+                  <EntityMark url={team.avatar} fallback={team.name[0]}
+                    className="w-5 h-5 rounded flex items-center justify-center text-white text-xs font-bold"
+                    style={{ backgroundColor: team.avatarColor }} />
                   <span className="truncate">{team.name}</span>
                   {team.id === currentTeam.id && (
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="ml-auto text-indigo-600 dark:text-indigo-400">
@@ -206,7 +213,9 @@ export function AppShell({ teams, view, notifications, currentUser, isDark, onNa
       {/* Projects */}
       <div className="px-3 py-2 flex-1 overflow-y-auto">
         <p className="px-2 mb-1 text-[11px] font-semibold tracking-wider text-zinc-400 dark:text-zinc-600 uppercase">Projects</p>
-        {currentTeam.projects.map(project => (
+        {currentTeam.projects.map(project => {
+          const isMember = project.members.some(m => m.id === currentUser.id);
+          return (
           <div key={project.id}>
             <button
               onClick={() => navToProject(currentTeam.id, project.id)}
@@ -215,13 +224,18 @@ export function AppShell({ teams, view, notifications, currentUser, isDark, onNa
                   ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-medium'
                   : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100'
               }`}>
-              <span className="w-4 h-4 rounded text-[10px] font-bold flex items-center justify-center bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 flex-shrink-0">
-                {project.key[0]}
-              </span>
+              <EntityMark url={project.avatar} fallback={project.key[0]}
+                className="w-4 h-4 rounded text-[10px] font-bold flex items-center justify-center bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300" />
               <span className="truncate flex-1 text-left">{project.name}</span>
+              {!isMember && (
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" className="flex-shrink-0 text-zinc-400 dark:text-zinc-600" aria-label="Not a member">
+                  <rect x="2.5" y="5.5" width="7" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+                  <path d="M4 5.5V4a2 2 0 014 0v1.5" stroke="currentColor" strokeWidth="1.2" />
+                </svg>
+              )}
             </button>
             {/* Sub-nav when project active */}
-            {activeProjectId === project.id && (view.screen === 'project' || view.screen === 'reports' || view.screen === 'labels' || view.screen === 'members') && (
+            {isMember && activeProjectId === project.id && (view.screen === 'project' || view.screen === 'reports' || view.screen === 'labels' || view.screen === 'members' || view.screen === 'general') && (
               <div className="ml-6 mb-1">
                 {(['board', 'backlog', 'sprints'] as TabType[]).map(tab => (
                   <button key={tab} onClick={() => navToProject(currentTeam.id, project.id, tab)}
@@ -239,17 +253,18 @@ export function AppShell({ teams, view, notifications, currentUser, isDark, onNa
                   }`}>
                   Reports
                 </button>
-                <button onClick={() => onNavigate({ screen: 'labels', teamId: currentTeam.id, projectId: project.id })}
+                <button onClick={() => onNavigate({ screen: 'general', teamId: currentTeam.id, projectId: project.id })}
                   className={`w-full text-left px-2 py-1 rounded text-xs transition-colors ${
-                    (view as AppView).screen === 'labels' || (view as AppView).screen === 'members' ? 'text-indigo-700 dark:text-indigo-400 font-medium' : 'text-zinc-500 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+                    (view as AppView).screen === 'labels' || (view as AppView).screen === 'members' || (view as AppView).screen === 'general' ? 'text-indigo-700 dark:text-indigo-400 font-medium' : 'text-zinc-500 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
                   }`}>
                   Settings
                 </button>
               </div>
             )}
           </div>
-        ))}
-        {newProjectOpen ? (
+          );
+        })}
+        {!isTeamAdmin ? null : newProjectOpen ? (
           <form onSubmit={e => void handleCreateProject(currentTeam.id, e)} className="px-2 py-2 space-y-2">
             {newProjectError && <p className="text-xs text-red-600 dark:text-red-400" role="alert">{newProjectError}</p>}
             <label htmlFor="new-project-name" className="sr-only">Project name</label>
@@ -309,7 +324,7 @@ export function AppShell({ teams, view, notifications, currentUser, isDark, onNa
           {isDark ? (
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.22 3.22l1.06 1.06M11.72 11.72l1.06 1.06M3.22 12.78l1.06-1.06M11.72 4.28l1.06-1.06" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
           ) : (
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 9.5A6 6 0 016.5 2.5a6 6 0 100 11 6 6 0 007-4z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M14 8.53A6 6 0 117.47 2a4.67 4.67 0 006.53 6.53z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
           )}
         </button>
 

@@ -93,6 +93,8 @@ export interface Project {
   name: string;
   key: string;
   description: string;
+  avatar?: string;
+  banner?: string;
   tickets: Ticket[];
   sprints: Sprint[];
   members: User[];
@@ -110,6 +112,8 @@ export interface Team {
   name: string;
   slug: string;
   avatarColor: string;
+  avatar?: string;
+  banner?: string;
   projects: Project[];
   members: TeamMember[];
 }
@@ -133,5 +137,6 @@ export type AppView =
   | { screen: 'labels'; teamId: string; projectId: string }
   | { screen: 'reports'; teamId: string; projectId: string }
   | { screen: 'members'; teamId: string; projectId: string }
+  | { screen: 'general'; teamId: string; projectId: string }
   | { screen: 'integrations'; teamId: string }
   | { screen: 'profile'; teamId: string };

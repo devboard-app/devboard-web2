@@ -177,17 +177,17 @@ export function AuthScreen({ mode, onSuccess, onModeChange }: Props) {
                     className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow"
                     placeholder="you@company.com" />
                 </div>
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Password</label>
-                    <button type="button" onClick={() => switchMode('forgot')}
-                      className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">
-                      Forgot password?
-                    </button>
-                  </div>
-                  <input type="password" required value={password} onChange={e => setPassword(e.target.value)}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow"
+                {/* The link sits after the input in the DOM so Tab goes email → password;
+                    the grid still draws it in the label row. */}
+                <div className="grid grid-cols-[1fr_auto] items-center gap-y-1.5">
+                  <label htmlFor="login-password" className="col-start-1 row-start-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Password</label>
+                  <input id="login-password" type="password" required value={password} onChange={e => setPassword(e.target.value)}
+                    className="col-span-2 row-start-2 w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow"
                     placeholder="••••••••" />
+                  <button type="button" onClick={() => switchMode('forgot')}
+                    className="col-start-2 row-start-1 text-xs text-indigo-600 dark:text-indigo-400 hover:underline">
+                    Forgot password?
+                  </button>
                 </div>
                 <button type="submit" disabled={loading}
                   className="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-colors">

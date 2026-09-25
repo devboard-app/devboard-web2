@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Team, UserRole } from '@/types';
 import { Avatar } from '@/components/layout/AppShell';
+import { ProfileHeader } from '@/components/ui/ImageField';
 
 interface Props {
   team: Team;
@@ -9,6 +10,7 @@ interface Props {
   onRoleChange: (userId: string, role: UserRole) => Promise<void>;
   onRemove: (userId: string) => Promise<void>;
   onLeave: () => Promise<void>;
+  onUpdateImages: (patch: { avatar?: string; banner?: string }) => Promise<void>;
 }
 
 const roleColors: Record<UserRole, string> = {
@@ -18,6 +20,11 @@ const roleColors: Record<UserRole, string> = {
   viewer: 'bg-zinc-50 text-zinc-500 dark:bg-zinc-900 dark:text-zinc-500',
 };
 
+// Mirrors devboard-work's can_assign_role: you can only invite, re-role or remove
+// someone ranked strictly below you, and only into a role below your own.
+const ROLE_RANK: Record<UserRole, number> = { owner: 0, admin: 1, member: 2, viewer: 3 };
+const ASSIGNABLE_ROLES: UserRole[] = ['admin', 'member', 'viewer'];
+
 function RoleBadge({ role }: { role: UserRole }) {
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${roleColors[role]}`}>
@@ -26,7 +33,7 @@ function RoleBadge({ role }: { role: UserRole }) {
   );
 }
 
-export function TeamPage({ team, currentUserId, onInvite, onRoleChange, onRemove, onLeave }: Props) {
+export function TeamPage({ team, currentUserId, onInvite, onRoleChange, onRemove, onLeave, onUpdateImages }: Props) {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<UserRole>('member');
   const [showInvite, setShowInvite] = useState(false);
@@ -36,6 +43,12 @@ export function TeamPage({ team, currentUserId, onInvite, onRoleChange, onRemove
   const [leaveError, setLeaveError] = useState<string | null>(null);
   const [memberActionError, setMemberActionError] = useState<string | null>(null);
   const members = team.members;
+  // Mirrors devboard-work: team PATCH and member management are owner/admin only.
+  const myRole = members.find(m => m.id === currentUserId)?.role;
+  const canEditTeam = myRole === 'owner' || myRole === 'admin';
+  const assignableRoles = myRole ? ASSIGNABLE_ROLES.filter(r => ROLE_RANK[r] > ROLE_RANK[myRole]) : [];
+  const canManage = (member: { id: string; role: UserRole }) =>
+    canEditTeam && member.id !== currentUserId && ROLE_RANK[member.role] > ROLE_RANK[myRole!];
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
@@ -63,17 +76,16 @@ export function TeamPage({ team, currentUserId, onInvite, onRoleChange, onRemove
   return (
     <div className="h-full overflow-y-auto">
       <div className="max-w-2xl mx-auto px-6 py-8">
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-8">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-base font-bold"
-            style={{ backgroundColor: team.avatarColor }}>
-            {team.name[0]}
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">{team.name}</h1>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">/{team.slug}</p>
-          </div>
-        </div>
+        <ProfileHeader
+          title={team.name}
+          subtitle={`/${team.slug}`}
+          avatarUrl={team.avatar}
+          bannerUrl={team.banner}
+          avatarFallback={team.name[0]}
+          accentColor={team.avatarColor}
+          canEdit={canEditTeam}
+          onSave={onUpdateImages}
+        />
 
         {/* Stats row */}
         <div className="grid grid-cols-3 gap-4 mb-8">
@@ -93,15 +105,17 @@ export function TeamPage({ team, currentUserId, onInvite, onRoleChange, onRemove
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800">
           <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100 dark:border-zinc-800">
             <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Members</h2>
-            <button onClick={() => setShowInvite(v => !v)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-              Invite member
-            </button>
+            {canEditTeam && (
+              <button onClick={() => setShowInvite(v => !v)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                Invite member
+              </button>
+            )}
           </div>
 
           {/* Invite form */}
-          {showInvite && (
+          {showInvite && canEditTeam && (
             <form onSubmit={handleInvite}
               className="px-5 py-4 bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-100 dark:border-zinc-800">
               <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-3">Invite by email</p>
@@ -116,9 +130,7 @@ export function TeamPage({ team, currentUserId, onInvite, onRoleChange, onRemove
                 />
                 <select value={inviteRole} onChange={e => setInviteRole(e.target.value as UserRole)}
                   className="px-3 py-1.5 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                  <option value="member">Member</option>
-                  <option value="admin">Admin</option>
-                  <option value="viewer">Viewer</option>
+                  {assignableRoles.map(r => <option key={r} value={r}>{r[0].toUpperCase() + r.slice(1)}</option>)}
                 </select>
                 <button type="submit" disabled={inviteLoading}
                   className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-colors">
@@ -149,10 +161,11 @@ export function TeamPage({ team, currentUserId, onInvite, onRoleChange, onRemove
                     <p className="text-xs text-zinc-500 dark:text-zinc-400">You</p>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="relative flex items-center">
                   <RoleBadge role={member.role} />
-                  {member.role !== 'owner' && member.id !== currentUserId && (
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
+                  {canManage(member) && (
+                    // Overlaid (absolute) so the hidden controls don't reserve width and every badge lines up.
+                    <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2 flex items-center gap-1 pl-2 bg-zinc-50 dark:bg-zinc-800 rounded opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto">
                       <label className="sr-only" htmlFor={`role-${member.id}`}>Role for {member.username}</label>
                       <select
                         id={`role-${member.id}`}
@@ -164,9 +177,7 @@ export function TeamPage({ team, currentUserId, onInvite, onRoleChange, onRemove
                         }}
                         onClick={e => e.stopPropagation()}
                         className="text-xs px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 focus:outline-none">
-                        <option value="admin">Admin</option>
-                        <option value="member">Member</option>
-                        <option value="viewer">Viewer</option>
+                        {assignableRoles.map(r => <option key={r} value={r}>{r[0].toUpperCase() + r.slice(1)}</option>)}
                       </select>
                       <button onClick={() => {
                           setMemberActionError(null);
@@ -195,15 +206,19 @@ export function TeamPage({ team, currentUserId, onInvite, onRoleChange, onRemove
           <div className="px-5 py-4 flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">Leave team</p>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">You'll lose access to all projects in this team.</p>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                {myRole === 'owner' ? "You're the owner, so you can't leave this team." : "You'll lose access to all projects in this team."}
+              </p>
               {leaveError && (
                 <p role="alert" className="text-xs text-red-600 dark:text-red-400 mt-1">{leaveError}</p>
               )}
             </div>
-            <button onClick={handleLeave} disabled={leaveLoading}
-              className="px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-60 rounded-lg transition-colors">
-              {leaveLoading ? 'Leaving…' : 'Leave team'}
-            </button>
+            {myRole !== 'owner' && (
+              <button onClick={handleLeave} disabled={leaveLoading}
+                className="px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-60 rounded-lg transition-colors">
+                {leaveLoading ? 'Leaving…' : 'Leave team'}
+              </button>
+            )}
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { EpicSummary, Sprint, Ticket, SprintStatus } from '@/types';
 import { EpicTag } from '@/components/tickets/EpicTag';
+import { TicketTypeIcon } from '@/components/tickets/TicketTypeIcon';
 
 interface Props {
   sprints: Sprint[];
@@ -11,6 +12,8 @@ interface Props {
   onCompleteSprint: (sprintId: string) => void;
   onRemoveFromSprint: (sprintId: string, ticketId: string) => void;
   onTicketClick: (id: string) => void;
+  /** Creating, starting, completing sprints and removing tickets is lead-only in devboard-work. */
+  isLead: boolean;
 }
 
 const statusConfig: Record<SprintStatus, { label: string; color: string; bg: string }> = {
@@ -33,7 +36,7 @@ function SprintProgress({ tickets }: { tickets: Ticket[] }) {
   );
 }
 
-export function SprintsView({ sprints, sprintTickets, epicById, onCreateSprint, onStartSprint, onCompleteSprint, onRemoveFromSprint, onTicketClick }: Props) {
+export function SprintsView({ sprints, sprintTickets, epicById, onCreateSprint, onStartSprint, onCompleteSprint, onRemoveFromSprint, onTicketClick, isLead }: Props) {
   const [expanded, setExpanded] = useState<string | null>(sprints.find(s => s.status === 'active')?.id ?? null);
   const [creating, setCreating] = useState(false);
   const [newSprintName, setNewSprintName] = useState('');
@@ -63,15 +66,17 @@ export function SprintsView({ sprints, sprintTickets, epicById, onCreateSprint, 
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Sprints</h2>
-          <button onClick={() => setCreating(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors">
-            <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M5.5 1v9M1 5.5h9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-            New sprint
-          </button>
+          {isLead && (
+            <button onClick={() => setCreating(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors">
+              <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M5.5 1v9M1 5.5h9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+              New sprint
+            </button>
+          )}
         </div>
 
         {/* Create sprint */}
-        {creating && (
+        {creating && isLead && (
           <div className="mb-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
             <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-2">New sprint</p>
             <div className="flex gap-2">
@@ -143,14 +148,14 @@ export function SprintsView({ sprints, sprintTickets, epicById, onCreateSprint, 
 
                   {/* Actions */}
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    {sprint.status === 'created' && (
+                    {isLead && sprint.status === 'created' && (
                       <button onClick={() => onStartSprint(sprint.id)} disabled={!canStart}
                         title={canStart ? undefined : 'A sprint needs at least one ticket before it can start'}
                         className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-medium rounded-lg transition-colors">
                         Start
                       </button>
                     )}
-                    {sprint.status === 'active' && (
+                    {isLead && sprint.status === 'active' && (
                       <button onClick={() => onCompleteSprint(sprint.id)}
                         className="px-2.5 py-1 bg-zinc-800 dark:bg-zinc-700 hover:bg-zinc-900 dark:hover:bg-zinc-600 text-white text-xs font-medium rounded-lg transition-colors">
                         Complete
@@ -182,14 +187,15 @@ export function SprintsView({ sprints, sprintTickets, epicById, onCreateSprint, 
                           className={`w-full flex items-center gap-3 px-4 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors group ${
                             i < tickets.length - 1 ? 'border-b border-zinc-50 dark:border-zinc-800/50' : ''
                           }`}>
-                          <button onClick={() => onTicketClick(ticket.id)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+                          <button onClick={() => onTicketClick(ticket.id)} data-keep-panel-open className="flex items-center gap-3 flex-1 min-w-0 text-left">
                             {/* Status dot */}
                             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
                               ticket.status === 'done' ? 'bg-emerald-500' :
                               ticket.status === 'in_progress' ? 'bg-blue-500' :
                               ticket.status === 'in_review' ? 'bg-amber-500' : 'bg-zinc-300 dark:bg-zinc-700'
                             }`} />
-                            <span className="text-[11px] font-mono text-zinc-400 dark:text-zinc-500 flex-shrink-0 w-14">{ticket.key}</span>
+                            <TicketTypeIcon type={ticket.type} />
+                              <span className="text-[11px] font-mono text-zinc-400 dark:text-zinc-500 flex-shrink-0 w-14">{ticket.key}</span>
                             <span className="flex-1 text-sm text-zinc-800 dark:text-zinc-200 truncate">{ticket.title}</span>
                             <div className="flex items-center gap-2 flex-shrink-0">
                               {ticket.parentEpicId && epicById[ticket.parentEpicId] && <span className="hidden sm:inline"><EpicTag epic={epicById[ticket.parentEpicId]} /></span>}
@@ -199,11 +205,13 @@ export function SprintsView({ sprints, sprintTickets, epicById, onCreateSprint, 
                               {ticket.storyPoints && <span className="text-[11px] text-zinc-400 dark:text-zinc-600">{ticket.storyPoints}pt</span>}
                             </div>
                           </button>
-                          <button onClick={() => onRemoveFromSprint(sprint.id, ticket.id)}
-                            title="Remove from sprint" aria-label={`Remove ${ticket.title} from sprint`}
-                            className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-2 rounded text-zinc-400 hover:text-red-500 dark:hover:text-red-400 transition-all flex-shrink-0">
-                            <svg width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-                          </button>
+                          {isLead && sprint.status !== 'completed' && (
+                            <button onClick={() => onRemoveFromSprint(sprint.id, ticket.id)}
+                              title="Remove from sprint" aria-label={`Remove ${ticket.title} from sprint`}
+                              className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-2 rounded text-zinc-400 hover:text-red-500 dark:hover:text-red-400 transition-all flex-shrink-0">
+                              <svg width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                            </button>
+                          )}
                         </div>
                       ))
                     )}
@@ -221,11 +229,15 @@ export function SprintsView({ sprints, sprintTickets, epicById, onCreateSprint, 
                 </svg>
               </div>
               <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">No sprints yet</p>
-              <p className="text-xs text-zinc-400 dark:text-zinc-600 mt-1 mb-4">Create a sprint to start planning</p>
-              <button onClick={() => setCreating(true)}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors">
-                Create first sprint
-              </button>
+              <p className="text-xs text-zinc-400 dark:text-zinc-600 mt-1 mb-4">
+                {isLead ? 'Create a sprint to start planning' : 'The project lead plans sprints'}
+              </p>
+              {isLead && (
+                <button onClick={() => setCreating(true)}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors">
+                  Create first sprint
+                </button>
+              )}
             </div>
           )}
         </div>

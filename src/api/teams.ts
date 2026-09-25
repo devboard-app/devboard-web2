@@ -9,11 +9,12 @@ export interface Paginated<T> {
 
 export type TeamRole = 'owner' | 'admin' | 'member' | 'viewer';
 
-// devboard-work's Team has no `status`/`avatar` field — just this.
 export interface ApiTeam {
   id: string;
   name: string;
   description: string;
+  avatar: string; // public image URL, '' when unset
+  banner: string;
   owner_id: string;
   created_at: string;
 }
@@ -32,6 +33,10 @@ export const createTeam = (name: string, description?: string) =>
   apiPost<ApiTeam>('/api/teams/', { name, description });
 
 export const getTeamDetail = (teamId: string) => apiGet<ApiTeam>(`/api/teams/${teamId}/`);
+
+// Owner/admin only server-side. Partial: send just the fields that change.
+export const updateTeam = (teamId: string, patch: { avatar?: string; banner?: string }) =>
+  apiPatch<ApiTeam>(`/api/teams/${teamId}/`, patch);
 
 export const listTeamMembers = (teamId: string) =>
   apiGet<Paginated<TeamMembership>>(`/api/teams/${teamId}/members/`, { limit: 100 });

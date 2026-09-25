@@ -92,6 +92,11 @@ export interface CycleTimeReport {
 export const getActivity = (projectId: string, limit = 20, offset = 0) =>
   apiGet<Paginated<ActivityEvent>>(`/reports/projects/${projectId}/activity/`, { limit, offset });
 
+// Everything that happened on one ticket, whoever did it, for any project member.
+// Includes the ticket's comment events. Newest first.
+export const getTicketActivity = (projectId: string, ticketId: string, limit = 20, offset = 0) =>
+  apiGet<Paginated<ActivityEvent>>(`/reports/projects/${projectId}/tickets/${ticketId}/activity/`, { limit, offset });
+
 // Lead-only (a contributor gets 403).
 export const getVelocity = (projectId: string) =>
   apiGet<VelocityReport>(`/reports/projects/${projectId}/velocity/`);

@@ -8,6 +8,7 @@ import { ListSkeleton } from '@/components/ui/ListSkeleton';
 interface Props {
   teamId: string;
   project: Project;
+  currentUserId: string;
 }
 
 const PRESET_COLORS = ['#EF4444', '#F97316', '#F59E0B', '#10B981', '#06B6D4', '#6366F1', '#8B5CF6', '#EC4899', '#64748B'];
@@ -26,7 +27,9 @@ function ColorSwatch({ color, selected, onClick }: { color: string; selected: bo
   );
 }
 
-export function LabelsPage({ teamId, project }: Props) {
+export function LabelsPage({ teamId, project, currentUserId }: Props) {
+  // Creating, editing and deleting labels is lead-only in devboard-work.
+  const isLead = project.leadIds.includes(currentUserId);
   const { labels, loading, error: loadError, createLabel: apiCreateLabel, updateLabel: apiUpdateLabel, deleteLabel: apiDeleteLabel } =
     useProjectLabels(teamId, project.id);
 
@@ -93,11 +96,13 @@ export function LabelsPage({ teamId, project }: Props) {
             <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">Labels</h1>
             <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">{project.name} · {labels.length} labels</p>
           </div>
-          <button onClick={() => setCreating(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors">
-            <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M5.5 1v9M1 5.5h9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-            New label
-          </button>
+          {isLead && (
+            <button onClick={() => setCreating(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors">
+              <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M5.5 1v9M1 5.5h9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+              New label
+            </button>
+          )}
         </div>
 
         {actionError && (
@@ -113,7 +118,7 @@ export function LabelsPage({ teamId, project }: Props) {
         )}
 
         {/* Create form */}
-        {creating && (
+        {creating && isLead && (
           <div className="mb-4 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-4">
             <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-3">New label</p>
             <div className="space-y-3">
@@ -176,8 +181,8 @@ export function LabelsPage({ teamId, project }: Props) {
               </svg>
             }
             title="No labels yet"
-            description="Labels help categorize and filter tickets"
-            action={{ label: 'Create first label', onClick: () => setCreating(true) }}
+            description={isLead ? 'Labels help categorize and filter tickets' : 'The project lead manages labels'}
+            action={isLead ? { label: 'Create first label', onClick: () => setCreating(true) } : undefined}
           />
         ) : (
           <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -213,7 +218,7 @@ export function LabelsPage({ teamId, project }: Props) {
                     </span>
                     <span className="text-xs text-zinc-500 dark:text-zinc-400 flex-shrink-0">{label.color}</span>
 
-                    <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
+                    {isLead && <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
                       <button onClick={() => startEdit(label)} disabled={busyId === label.id} aria-label={`Edit label ${label.name}`}
                         className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors disabled:opacity-40">
                         <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M2 11L2 8.5L9.5 1 12 3.5 4.5 11H2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg>
@@ -222,7 +227,7 @@ export function LabelsPage({ teamId, project }: Props) {
                         className="p-2 text-zinc-400 hover:text-red-500 dark:hover:text-red-400 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors disabled:opacity-40">
                         <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M2 3.5h9M5 3.5V2h3v1.5M5.5 6v4M7.5 6v4M3 3.5L3.5 11h6L10 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                       </button>
-                    </div>
+                    </div>}
                   </>
                 )}
               </div>

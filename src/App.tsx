@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import type { AppView, Team, Notification, TabType, User } from '@/types';
+import type { AppView, Team, Notification, TabType, User, Project } from '@/types';
 import { AuthScreen } from '@/components/auth/AuthScreen';
 import { VerifyEmailPage } from '@/components/auth/VerifyEmailPage';
 import { ResetPasswordPage } from '@/components/auth/ResetPasswordPage';
@@ -9,8 +9,11 @@ import { getMe, type CoreUser } from '@/api/users';
 import { ProfilePage } from '@/components/profile/ProfilePage';
 import { MembersPage } from '@/components/projects/MembersPage';
 import { ProjectSettingsPage } from '@/components/projects/ProjectSettingsPage';
+import { ProjectGeneralPage } from '@/components/projects/ProjectGeneralPage';
+import { NotProjectMember } from '@/components/projects/NotProjectMember';
 import { useTeamsData } from '@/hooks/useTeamsData';
 import { useNotifications } from '@/hooks/useNotifications';
+import { clearAllChats } from '@/hooks/useChat';
 import { colorFor, initialsFor } from '@/lib/avatar';
 import { AppShell } from '@/components/layout/AppShell';
 import { TeamPage } from '@/components/teams/TeamPage';
@@ -47,6 +50,8 @@ function viewToPath(view: AppView): string {
       return `/teams/${view.teamId}/projects/${view.projectId}/labels`;
     case 'members':
       return `/teams/${view.teamId}/projects/${view.projectId}/members`;
+    case 'general':
+      return `/teams/${view.teamId}/projects/${view.projectId}/general`;
     case 'reports':
       return `/teams/${view.teamId}/projects/${view.projectId}/reports`;
     case 'integrations':
@@ -74,6 +79,7 @@ function deriveView(pathname: string, teams: Team[]): AuthedView {
   if (!projectId && pathname.endsWith('/profile')) return { screen: 'profile', teamId };
   if (projectId && pathname.endsWith('/labels')) return { screen: 'labels', teamId, projectId };
   if (projectId && pathname.endsWith('/members')) return { screen: 'members', teamId, projectId };
+  if (projectId && pathname.endsWith('/general')) return { screen: 'general', teamId, projectId };
   if (projectId && pathname.endsWith('/reports')) return { screen: 'reports', teamId, projectId };
   if (projectId && ticketId) return { screen: 'project', teamId, projectId, tab: 'board', ticketId };
   if (projectId) {
@@ -100,6 +106,7 @@ export default function App() {
   const {
     teams, loading: teamsLoading, error: teamsError,
     createTeam, createProject, addProjectMember, changeProjectMemberRole, removeProjectMember, inviteMember, changeMemberRole, removeMember, leaveTeam,
+    updateTeamImages, updateProjectImages,
   } = useTeamsData(authed);
 
   const { notifications, total: notificationsTotal, error: notificationsError, markRead, markAllRead, dismiss: dismissNotif } = useNotifications(authed);
@@ -141,6 +148,7 @@ export default function App() {
 
   async function handleLogout() {
     await logout();
+    clearAllChats();
     setAuthed(false);
     navigate('/login');
   }
@@ -191,6 +199,10 @@ export default function App() {
 
     const currentTeam = getTeam(view.teamId);
 
+    // Team members who aren't on a project get a "not a member" screen instead of 403s.
+    // Until `me` loads, assume membership so a project doesn't flash the wrong screen.
+    const isProjectMember = (project: Project) => !me || project.members.some(m => m.id === me.id);
+
     function renderContent() {
       if (view.screen === 'team') {
         return (
@@ -201,12 +213,14 @@ export default function App() {
             onRoleChange={(userId, role) => changeMemberRole(currentTeam.id, userId, role)}
             onRemove={(userId) => removeMember(currentTeam.id, userId)}
             onLeave={() => leaveTeam(currentTeam.id)}
+            onUpdateImages={patch => updateTeamImages(currentTeam.id, patch)}
           />
         );
       }
       if (view.screen === 'project') {
         const project = getProject(view.teamId, view.projectId);
         if (!project) return <NoProjectsYet />;
+        if (!isProjectMember(project)) return <NotProjectMember project={project} />;
         return (
           <ProjectPage
             teamName={currentTeam.name}
@@ -220,13 +234,15 @@ export default function App() {
             onCloseDeepLink={() => navigate(viewToPath({ ...view, ticketId: undefined }), { replace: true })}
             onCorrectDeepLinkTab={(tab: TabType) => navigate(viewToPath({ ...view, tab }), { replace: true })}
             onOpenReports={() => goTo({ screen: 'reports', teamId: view.teamId, projectId: view.projectId })}
-            onOpenSettings={() => goTo({ screen: 'labels', teamId: view.teamId, projectId: view.projectId })}
+            onOpenSettings={() => goTo({ screen: 'general', teamId: view.teamId, projectId: view.projectId })}
+            onOpenLabels={() => goTo({ screen: 'labels', teamId: view.teamId, projectId: view.projectId })}
           />
         );
       }
-      if (view.screen === 'labels' || view.screen === 'members') {
+      if (view.screen === 'labels' || view.screen === 'members' || view.screen === 'general') {
         const project = getProject(view.teamId, view.projectId);
         if (!project) return <NoProjectsYet />;
+        if (!isProjectMember(project)) return <NotProjectMember project={project} />;
         return (
           <ProjectSettingsPage
             teamName={currentTeam.name}
@@ -236,8 +252,11 @@ export default function App() {
             onTabChange={tab => goTo({ screen: tab, teamId: view.teamId, projectId: view.projectId })}
             onNavigateProjectTab={tab => goTo({ screen: 'project', teamId: view.teamId, projectId: view.projectId, tab })}
             onOpenReports={() => goTo({ screen: 'reports', teamId: view.teamId, projectId: view.projectId })}>
-            {view.screen === 'labels' ? (
-              <LabelsPage teamId={view.teamId} project={project} />
+            {view.screen === 'general' ? (
+              <ProjectGeneralPage project={project} currentUserId={me?.id ?? ''}
+                onUpdateImages={patch => updateProjectImages(currentTeam.id, project.id, patch)} />
+            ) : view.screen === 'labels' ? (
+              <LabelsPage teamId={view.teamId} project={project} currentUserId={me?.id ?? ''} />
             ) : (
               <MembersPage
                 team={currentTeam}
@@ -255,6 +274,7 @@ export default function App() {
       if (view.screen === 'reports') {
         const project = getProject(view.teamId, view.projectId);
         if (!project) return <NoProjectsYet />;
+        if (!isProjectMember(project)) return <NotProjectMember project={project} />;
         return (
           <ReportsPage
             teamName={currentTeam.name}
@@ -263,7 +283,7 @@ export default function App() {
             project={project}
             currentUserId={me?.id ?? ''}
             onNavigateProjectTab={tab => goTo({ screen: 'project', teamId: view.teamId, projectId: view.projectId, tab })}
-            onOpenSettings={() => goTo({ screen: 'labels', teamId: view.teamId, projectId: view.projectId })}
+            onOpenSettings={() => goTo({ screen: 'general', teamId: view.teamId, projectId: view.projectId })}
           />
         );
       }
@@ -336,6 +356,7 @@ export default function App() {
       <Route path="/teams/:teamId/projects/:projectId/backlog" element={authed ? renderAuthedShell() : <Navigate to="/login" replace />} />
       <Route path="/teams/:teamId/projects/:projectId/sprints" element={authed ? renderAuthedShell() : <Navigate to="/login" replace />} />
       <Route path="/teams/:teamId/projects/:projectId/tickets/:ticketId" element={authed ? renderAuthedShell() : <Navigate to="/login" replace />} />
+      <Route path="/teams/:teamId/projects/:projectId/general" element={authed ? renderAuthedShell() : <Navigate to="/login" replace />} />
       <Route path="/teams/:teamId/projects/:projectId/labels" element={authed ? renderAuthedShell() : <Navigate to="/login" replace />} />
       <Route path="/teams/:teamId/projects/:projectId/members" element={authed ? renderAuthedShell() : <Navigate to="/login" replace />} />
       <Route path="/teams/:teamId/projects/:projectId/reports" element={authed ? renderAuthedShell() : <Navigate to="/login" replace />} />

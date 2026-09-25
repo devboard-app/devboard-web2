@@ -19,7 +19,7 @@ function statusLabel(value: string | null | undefined) {
   return statusLabels[value as TicketStatus] ?? value ?? '?';
 }
 
-interface ActivityText { verb: string; target: string; rest?: string; href?: string; detail?: string }
+export interface ActivityText { verb: string; target: string; rest?: string; href?: string; detail?: string }
 
 // The URL comes from a GitHub payload, so only ever link to https.
 function safeHttpsUrl(url: string | undefined) {
@@ -27,7 +27,7 @@ function safeHttpsUrl(url: string | undefined) {
 }
 
 /** Turns a raw analytics event into "<actor> <verb> <target> <rest>". */
-function describeEvent(e: ActivityEvent, nameOf: (id: string) => string): ActivityText {
+export function describeEvent(e: ActivityEvent, nameOf: (id: string) => string): ActivityText {
   const m = e.metadata;
   const label = m.label_name ? `label ${m.label_name}` : 'a label';
   switch (e.action) {

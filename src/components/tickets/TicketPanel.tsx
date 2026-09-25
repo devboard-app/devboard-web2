@@ -6,8 +6,11 @@ import { ApiError } from '@/api/client';
 import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENT_SIZE_BYTES, deleteAttachment } from '@/api/attachments';
 import { useTicketComments } from '@/hooks/useTicketComments';
 import { useTicketActivity } from '@/hooks/useTicketActivity';
+import { useDismiss } from '@/hooks/useDismiss';
 import { ActivityRow } from '@/components/activity/ActivityRow';
 import { Avatar } from '@/components/layout/AppShell';
+import { MentionTextarea, CommentBody } from './MentionTextarea';
+import { AttachmentPreview } from './AttachmentPreview';
 import { LoadingState } from '@/components/ui/LoadingState';
 
 interface Props {
@@ -16,7 +19,6 @@ interface Props {
   ticket: Ticket;
   projectMembers: User[];
   // Non-leads only ever get their own actions back from the activity API.
-  isLead: boolean;
   projectLabels: Label[];
   onCreateProjectLabel: (name: string, color?: string) => Promise<void>;
   /** Other epic-type tickets in this project, for the "Epic" picker. Empty if this ticket is itself an epic. */
@@ -29,6 +31,14 @@ interface Props {
   onManageLabels?: () => void;
   /** Switches the panel to show a different ticket — used by an epic's "Linked tickets" list. */
   onOpenTicket: (ticketId: string) => void;
+  /** In a sprint, "Backlog" isn't offered: the board has no such column, so the ticket would vanish from it. */
+  inSprint: boolean;
+  currentUserId: string;
+  /**
+   * Mirrors devboard-work: the lead edits any ticket, (re)assigns, and manages labels;
+   * a contributor edits only tickets assigned to them. Everyone can comment.
+   */
+  isLead: boolean;
 }
 
 const childStatusDot: Record<TicketStatus, string> = {
@@ -100,15 +110,14 @@ function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
 }
 
-function TicketActivityTab({ projectId, ticketId, members, isLead }: { projectId: string; ticketId: string; members: User[]; isLead: boolean }) {
-  const { events, truncated, loading, error, userFor } = useTicketActivity(projectId, ticketId, members);
+function TicketActivityTab({ projectId, ticketId, members }: { projectId: string; ticketId: string; members: User[] }) {
+  const { events, loading, error, userFor } = useTicketActivity(projectId, ticketId, members);
 
   if (loading) return <LoadingState fill={false} />;
   if (error) return <p role="alert" className="text-sm text-red-600 dark:text-red-400 py-4">{error}</p>;
 
   return (
     <div>
-      {!isLead && <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-2">Showing your own activity. Project leads see everyone's.</p>}
       {events.length === 0 ? (
         <p className="text-sm text-zinc-400 dark:text-zinc-600 text-center py-8">No activity yet</p>
       ) : (
@@ -116,15 +125,18 @@ function TicketActivityTab({ projectId, ticketId, members, isLead }: { projectId
           {events.map((e, i) => <ActivityRow key={e._id ?? i} event={e} userFor={userFor} className="py-3" />)}
         </div>
       )}
-      {truncated && <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-3">Searched only the most recent project activity; older events for this ticket may not appear.</p>}
     </div>
   );
 }
 
 export function TicketPanel({
-  teamId, projectId, ticket, projectMembers, isLead, projectLabels, onCreateProjectLabel, projectEpics,
-  onClose, onCommit, onAddLabel, onRemoveLabel, onManageLabels, onOpenTicket,
+  teamId, projectId, ticket, projectMembers, projectLabels, onCreateProjectLabel, projectEpics,
+  onClose, onCommit, onAddLabel, onRemoveLabel, onManageLabels, onOpenTicket, inSprint, currentUserId, isLead,
 }: Props) {
+  // Non-modal on desktop (no backdrop) so the board stays usable: clicking empty
+  // space or pressing Esc closes it, clicking another ticket card switches to it.
+  const panelRef = useRef<HTMLDivElement>(null);
+  useDismiss(panelRef, onClose);
   const [local, setLocal] = useState<Ticket>(ticket);
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingDesc, setEditingDesc] = useState(false);
@@ -199,6 +211,8 @@ export function TicketPanel({
   );
 
   const statusConfig = statusOptions.find(s => s.value === local.status)!;
+  // From the server copy, not `local`: the saved assignee decides the permission.
+  const canEdit = isLead || ticket.assignee?.id === currentUserId;
 
   return (
     <>
@@ -206,7 +220,7 @@ export function TicketPanel({
       <div className="fixed inset-0 bg-black/20 dark:bg-black/40 backdrop-blur-sm z-30 md:hidden" onClick={onClose} />
 
       {/* Panel */}
-      <div className="fixed inset-y-0 right-0 z-40 w-full md:w-[560px] bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 flex flex-col shadow-2xl">
+      <div ref={panelRef} className="fixed inset-y-0 right-0 z-40 w-full md:w-[560px] bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 flex flex-col shadow-2xl">
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-3 border-b border-zinc-100 dark:border-zinc-800 flex-shrink-0">
           <span className="text-xs font-mono font-medium text-zinc-400 dark:text-zinc-500">{local.key}</span>
@@ -219,8 +233,13 @@ export function TicketPanel({
 
         <div className="flex-1 overflow-y-auto">
           <div className="px-5 py-5">
+            {!canEdit && (
+              <p className="mb-4 px-3 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 text-xs text-zinc-500 dark:text-zinc-400">
+                Only the project lead or the assignee can edit this ticket. You can still comment.
+              </p>
+            )}
             {/* Title */}
-            {editingTitle ? (
+            {editingTitle && canEdit ? (
               <textarea
                 autoFocus
                 value={local.title}
@@ -230,14 +249,14 @@ export function TicketPanel({
                 className="w-full text-lg font-semibold text-zinc-900 dark:text-zinc-100 bg-transparent resize-none focus:outline-none border-b-2 border-indigo-500"
               />
             ) : (
-              <h2 onClick={() => setEditingTitle(true)}
-                className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 cursor-text hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors leading-snug mb-4">
+              <h2 onClick={() => canEdit && setEditingTitle(true)}
+                className={`text-lg font-semibold text-zinc-900 dark:text-zinc-100 leading-snug mb-4 ${canEdit ? 'cursor-text hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors' : ''}`}>
                 {local.title}
               </h2>
             )}
 
-            {/* Meta grid */}
-            <div className="grid grid-cols-2 gap-x-4 gap-y-3 mb-5 text-sm">
+            {/* Meta grid. A disabled fieldset makes every picker read-only at once. */}
+            <fieldset disabled={!canEdit} className="grid grid-cols-2 gap-x-4 gap-y-3 mb-5 text-sm [&_select:disabled]:cursor-default">
               {/* Type */}
               <div>
                 <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-1">Type</p>
@@ -257,7 +276,9 @@ export function TicketPanel({
                     value={local.status}
                     onChange={e => { const status = e.target.value as TicketStatus; setField({ status }); commit({ status }); }}
                     className={`text-xs font-medium px-2.5 py-1 rounded-full appearance-none cursor-pointer focus:outline-none ${statusConfig.color}`}>
-                    {statusOptions.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                    {statusOptions
+                      .filter(s => !inSprint || s.value !== 'backlog' || local.status === 'backlog')
+                      .map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                   </select>
                 </div>
               </div>
@@ -279,8 +300,9 @@ export function TicketPanel({
               <div>
                 <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-1">Assignee</p>
                 <div className="relative">
-                  <button onClick={() => setShowAssigneePicker(v => !v)}
-                    className="flex items-center gap-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
+                  <button onClick={() => setShowAssigneePicker(v => !v)} disabled={!isLead}
+                    title={isLead ? undefined : 'Only the project lead can assign tickets'}
+                    className="disabled:cursor-default flex items-center gap-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
                     {local.assignee ? (
                       <>
                         <Avatar user={local.assignee} size="xs" />
@@ -290,7 +312,7 @@ export function TicketPanel({
                       <span className="text-zinc-400 dark:text-zinc-500">Unassigned</span>
                     )}
                   </button>
-                  {showAssigneePicker && (
+                  {showAssigneePicker && isLead && (
                     <div className="absolute top-full left-0 mt-1 w-44 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg z-10 overflow-hidden">
                       <button onClick={() => { setField({ assignee: undefined }); commit({ assignee_id: null }); setShowAssigneePicker(false); }}
                         className="w-full text-left px-3 py-2 text-xs text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800">
@@ -341,7 +363,7 @@ export function TicketPanel({
                   </select>
                 </div>
               )}
-            </div>
+            </fieldset>
 
             {/* Linked tickets (only epics have children) */}
             {local.type === 'epic' && (
@@ -352,7 +374,7 @@ export function TicketPanel({
             <div className="mb-5">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs text-zinc-400 dark:text-zinc-500">Labels</p>
-                {onManageLabels && (
+                {onManageLabels && isLead && (
                   <button onClick={onManageLabels} className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline">
                     Manage labels
                   </button>
@@ -365,12 +387,14 @@ export function TicketPanel({
                   <span key={label.id} className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-xs font-medium group"
                     style={{ backgroundColor: label.color + '22', color: label.color }}>
                     {label.name}
-                    <button onClick={() => void handleRemoveLabel(label.id)} className="opacity-50 hover:opacity-100 transition-opacity" aria-label={`Remove ${label.name}`}>
-                      <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M1 1l7 7M8 1L1 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
-                    </button>
+                    {canEdit && (
+                      <button onClick={() => void handleRemoveLabel(label.id)} className="opacity-50 hover:opacity-100 transition-opacity" aria-label={`Remove ${label.name}`}>
+                        <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M1 1l7 7M8 1L1 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+                      </button>
+                    )}
                   </span>
                 ))}
-                <div className="relative">
+                {canEdit && <div className="relative">
                   <button onClick={() => setShowLabelPicker(v => !v)}
                     className="px-2 py-0.5 rounded-full text-xs text-zinc-500 dark:text-zinc-400 border border-dashed border-zinc-300 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors">
                     + Label
@@ -388,7 +412,7 @@ export function TicketPanel({
                           </button>
                         ))}
                       </div>
-                      <div className="border-t border-zinc-100 dark:border-zinc-800 p-2">
+                      {isLead && <div className="border-t border-zinc-100 dark:border-zinc-800 p-2">
                         {creatingLabel ? (
                           <div className="flex items-center gap-1">
                             <input autoFocus value={newLabelName} onChange={e => setNewLabelName(e.target.value)}
@@ -402,17 +426,17 @@ export function TicketPanel({
                             + New label
                           </button>
                         )}
-                      </div>
+                      </div>}
                     </div>
                   )}
-                </div>
+                </div>}
               </div>
             </div>
 
             {/* Description */}
             <div className="mb-6">
               <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-2">Description</p>
-              {editingDesc ? (
+              {editingDesc && canEdit ? (
                 <textarea
                   autoFocus
                   value={local.description}
@@ -422,9 +446,9 @@ export function TicketPanel({
                   className="w-full text-sm text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-800 rounded-lg p-3 resize-none focus:outline-none border border-indigo-500"
                 />
               ) : (
-                <div onClick={() => setEditingDesc(true)}
-                  className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed cursor-text hover:bg-zinc-50 dark:hover:bg-zinc-800 rounded-lg p-3 -mx-3 transition-colors whitespace-pre-wrap">
-                  {local.description || <span className="text-zinc-400 dark:text-zinc-600">Add a description…</span>}
+                <div onClick={() => canEdit && setEditingDesc(true)}
+                  className={`text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed rounded-lg p-3 -mx-3 whitespace-pre-wrap ${canEdit ? 'cursor-text hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors' : ''}`}>
+                  {local.description || <span className="text-zinc-400 dark:text-zinc-600">{canEdit ? 'Add a description…' : 'No description'}</span>}
                 </div>
               )}
             </div>
@@ -448,17 +472,20 @@ export function TicketPanel({
             {activeTab === 'comments' && (
               <CommentsTab
                 comments={comments}
+                members={projectMembers}
                 loading={commentsLoading}
                 error={commentsError}
                 submitting={submitting}
                 onAdd={addComment}
                 onEdit={editComment}
                 onDelete={removeComment}
+                currentUserId={currentUserId}
+                isLead={isLead}
               />
             )}
 
             {activeTab === 'activity' && (
-              <TicketActivityTab projectId={projectId} ticketId={ticket.id} members={projectMembers} isLead={isLead} />
+              <TicketActivityTab projectId={projectId} ticketId={ticket.id} members={projectMembers} />
             )}
 
             {activeTab === 'attachments' && <AttachmentsTab items={allAttachments} onRefetch={() => void 0} />}
@@ -470,15 +497,19 @@ export function TicketPanel({
 }
 
 function CommentsTab({
-  comments, loading, error, submitting, onAdd, onEdit, onDelete,
+  comments, members, loading, error, submitting, onAdd, onEdit, onDelete, currentUserId, isLead,
 }: {
   comments: Comment[];
+  members: User[];
   loading: boolean;
   error: string | null;
   submitting: boolean;
   onAdd: (body: string, files: File[]) => Promise<void>;
   onEdit: (commentId: string, body: string) => Promise<void>;
   onDelete: (commentId: string) => Promise<void>;
+  currentUserId: string;
+  /** Leads can delete anyone's comment; editing is always author-only. */
+  isLead: boolean;
 }) {
   const [draft, setDraft] = useState('');
   const [files, setFiles] = useState<File[]>([]);
@@ -487,6 +518,7 @@ function CommentsTab({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [rowError, setRowError] = useState<Record<string, string>>({});
+  const [preview, setPreview] = useState<Comment['attachments'][number] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleFilePick(picked: FileList | null) {
@@ -538,10 +570,11 @@ function CommentsTab({
     <div>
       {/* Composer */}
       <div className="mb-5">
-        <textarea
+        <MentionTextarea
           value={draft}
-          onChange={e => setDraft(e.target.value)}
-          placeholder="Write a comment…"
+          onChange={setDraft}
+          members={members}
+          placeholder="Write a comment… (type @ to mention)"
           rows={3}
           className="w-full text-sm text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-800 rounded-lg p-3 resize-none focus:outline-none border border-zinc-200 dark:border-zinc-700 focus:border-indigo-500"
         />
@@ -589,7 +622,7 @@ function CommentsTab({
               </div>
               {editingId === c.id ? (
                 <div className="mt-1">
-                  <textarea autoFocus value={editDraft} onChange={e => setEditDraft(e.target.value)} rows={2}
+                  <MentionTextarea autoFocus value={editDraft} onChange={setEditDraft} members={members} rows={2}
                     className="w-full text-sm text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-800 rounded-lg p-2 resize-none focus:outline-none border border-indigo-500" />
                   <div className="flex gap-2 mt-1">
                     <button onClick={() => void commitEdit(c.id)} className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">Save</button>
@@ -597,12 +630,12 @@ function CommentsTab({
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-zinc-700 dark:text-zinc-300 mt-0.5 whitespace-pre-wrap break-words">{c.body}</p>
+                <p className="text-sm text-zinc-700 dark:text-zinc-300 mt-0.5 whitespace-pre-wrap break-words"><CommentBody body={c.body} members={members} /></p>
               )}
               {c.attachments.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-1.5">
                   {c.attachments.map(a => (
-                    <a key={a.id} href={a.url} target="_blank" rel="noreferrer"
+                    <a key={a.id} href={a.url} target="_blank" rel="noreferrer" onClick={e => openPreview(e, a, setPreview)}
                       className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">
                       {a.filename} <span className="text-zinc-400">{formatSize(a.size)}</span>
                     </a>
@@ -610,9 +643,11 @@ function CommentsTab({
                 </div>
               )}
               {rowError[c.id] && <p className="text-xs text-red-600 dark:text-red-400 mt-1">{rowError[c.id]}</p>}
-              {editingId !== c.id && (
+              {editingId !== c.id && (c.author.id === currentUserId || isLead) && (
                 <div className="flex gap-3 mt-1">
-                  <button onClick={() => { setEditingId(c.id); setEditDraft(c.body); }} className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">Edit</button>
+                  {c.author.id === currentUserId && (
+                    <button onClick={() => { setEditingId(c.id); setEditDraft(c.body); }} className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">Edit</button>
+                  )}
                   <button onClick={() => void handleDelete(c.id)} className="text-xs text-zinc-400 hover:text-red-500 dark:hover:text-red-400">Delete</button>
                 </div>
               )}
@@ -620,13 +655,26 @@ function CommentsTab({
           </div>
         ))}
       </div>
+      {preview && <AttachmentPreview attachment={preview} onClose={() => setPreview(null)} />}
     </div>
   );
+}
+
+/** Plain click previews in place; Ctrl/Cmd/Shift/middle-click keep the browser's new-tab behavior. */
+function openPreview(
+  e: React.MouseEvent<HTMLAnchorElement>,
+  attachment: Comment['attachments'][number],
+  setPreview: (a: Comment['attachments'][number]) => void,
+) {
+  if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  setPreview(attachment);
 }
 
 function AttachmentsTab({ items }: { items: { attachment: Comment['attachments'][number]; comment: Comment }[]; onRefetch: () => void }) {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<Comment['attachments'][number] | null>(null);
 
   async function handleDelete(attachmentId: string) {
     setDeleting(attachmentId);
@@ -653,7 +701,7 @@ function AttachmentsTab({ items }: { items: { attachment: Comment['attachments']
       {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
       {items.map(({ attachment, comment }) => (
         <div key={attachment.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-zinc-100 dark:border-zinc-800">
-          <a href={attachment.url} target="_blank" rel="noreferrer" className="flex-1 min-w-0">
+          <a href={attachment.url} target="_blank" rel="noreferrer" onClick={e => openPreview(e, attachment, setPreview)} className="flex-1 min-w-0">
             <p className="text-sm text-zinc-700 dark:text-zinc-300 truncate">{attachment.filename}</p>
             <p className="text-xs text-zinc-400 dark:text-zinc-600">{formatSize(attachment.size)} · from {comment.author.username}'s comment</p>
           </a>
@@ -664,6 +712,7 @@ function AttachmentsTab({ items }: { items: { attachment: Comment['attachments']
           </button>
         </div>
       ))}
+      {preview && <AttachmentPreview attachment={preview} onClose={() => setPreview(null)} />}
     </div>
   );
 }

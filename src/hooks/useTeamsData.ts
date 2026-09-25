@@ -2,13 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Team, User } from '@/types';
 import {
   listTeams, createTeam as apiCreateTeam, listTeamMembers, addTeamMember,
-  updateTeamMemberRole, removeTeamMember as apiRemoveTeamMember, leaveTeam as apiLeaveTeam,
+  updateTeamMemberRole, removeTeamMember as apiRemoveTeamMember, leaveTeam as apiLeaveTeam, updateTeam as apiUpdateTeam,
   type ApiTeam, type TeamMembership, type TeamRole,
 } from '@/api/teams';
 import {
   listProjects, createProject as apiCreateProject, listProjectMembers,
   addProjectMember as apiAddProjectMember, updateProjectMemberRole as apiUpdateProjectMemberRole,
-  removeProjectMember as apiRemoveProjectMember,
+  removeProjectMember as apiRemoveProjectMember, updateProject as apiUpdateProject,
   type ApiProject, type ProjectMembership, type ProjectRole,
 } from '@/api/projects';
 import { batchUsers, type UserLookup } from '@/api/users';
@@ -90,12 +90,16 @@ export function useTeamsData(authed: boolean) {
     name: team.name,
     slug: slugify(team.name),
     avatarColor: colorFor(team.name),
+    avatar: team.avatar || undefined,
+    banner: team.banner || undefined,
     members: members.map(m => ({ ...toUser(m.user_id, usersById), role: m.role, joinedAt: m.joined_at })),
     projects: projects.map(p => ({
       id: p.id,
       name: p.name,
       key: p.key,
       description: p.description,
+      avatar: p.avatar || undefined,
+      banner: p.banner || undefined,
       // Not wired here — tickets/sprints load per-project via
       // useProjectData; labels load per-project via useProjectLabels.
       tickets: [],
@@ -150,6 +154,16 @@ export function useTeamsData(authed: boolean) {
     refetch();
   }
 
+  async function updateTeamImages(teamId: string, patch: { avatar?: string; banner?: string }) {
+    await apiUpdateTeam(teamId, patch);
+    refetch();
+  }
+
+  async function updateProjectImages(teamId: string, projectId: string, patch: { avatar?: string; banner?: string }) {
+    await apiUpdateProject(teamId, projectId, patch);
+    refetch();
+  }
+
   async function leaveTeamById(teamId: string) {
     await apiLeaveTeam(teamId);
     refetch();
@@ -158,6 +172,6 @@ export function useTeamsData(authed: boolean) {
   return {
     teams, loading, error,
     createTeam, createProject, addProjectMember, changeProjectMemberRole, removeProjectMember, inviteMember, changeMemberRole, removeMember,
-    leaveTeam: leaveTeamById,
+    leaveTeam: leaveTeamById, updateTeamImages, updateProjectImages,
   };
 }

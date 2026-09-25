@@ -1,5 +1,9 @@
 {
-  "description": "Streamline project management with a minimalist interface for teams to organize tasks, track progress, and collaborate efficiently.",
+  "title": "DevBoard",
+  "description": "Sprint boards, tickets and reports for your team.",
+  "icons": {
+    "icon": "/favicon.svg"
+  },
   "robots": {
     "index": false
   },

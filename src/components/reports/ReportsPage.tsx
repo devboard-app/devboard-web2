@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Project, TabType } from '@/types';
-import { ActivityRow } from '@/components/activity/ActivityRow';
+import { ActivityTimeline, ActivityTimelineSkeleton } from '@/components/activity/ActivityTimeline';
 import { useReport } from '@/hooks/useReport';
 import { useProjectActivity } from '@/hooks/useProjectActivity';
 import { listSprints, type ApiSprintSummary } from '@/api/sprints';
@@ -10,6 +10,7 @@ import {
 } from '@/api/reports';
 import { ChatPanel } from './ChatPanel';
 import { ProjectTopBar } from '@/components/projects/ProjectTopBar';
+import { Skeleton } from '@/components/ui/Skeleton';
 
 type ReportTab = 'activity' | 'dashboard';
 
@@ -26,10 +27,13 @@ function RefreshButton({ onClick, loading, label }: { onClick: () => void; loadi
   );
 }
 
-function ReportState({ loading, error, onRetry, empty, emptyText, children }: {
-  loading: boolean; error: string | null; onRetry?: () => void; empty?: boolean; emptyText?: string; children: React.ReactNode;
+function ReportState({ loading, error, onRetry, empty, emptyText, skeleton, children }: {
+  loading: boolean; error: string | null; onRetry?: () => void; empty?: boolean; emptyText?: string;
+  /** Page-shaped placeholder shown while loading; without it a small spinner is used. */
+  skeleton?: React.ReactNode; children: React.ReactNode;
 }) {
   if (loading) {
+    if (skeleton) return <div role="status" aria-label="Loading">{skeleton}</div>;
     return (
       <div role="status" className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400 py-4">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="animate-spin" aria-hidden="true">
@@ -61,6 +65,23 @@ function ReportState({ loading, error, onRetry, empty, emptyText, children }: {
     );
   }
   return <>{children}</>;
+}
+
+function StatTilesSkeleton() {
+  return (
+    <div className="grid grid-cols-3 gap-4 mt-5 pt-5 border-t border-zinc-100 dark:border-zinc-800">
+      {[0, 1, 2].map(i => (
+        <div key={i} className="space-y-2">
+          <Skeleton className="h-6 w-16" />
+          <Skeleton className="h-3 w-24" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ChartSkeleton() {
+  return <Skeleton className="h-40 w-full rounded-lg" />;
 }
 
 function StatTiles({ stats }: { stats: { label: string; value: string }[] }) {
@@ -194,17 +215,15 @@ function ActivityTab({ project, isLead }: { project: Project; isLead: boolean })
   const { events, total, loading, loadingMore, error, loadMore, refetch, userFor } = useProjectActivity(project.id, project.members);
 
   return (
-    <div className="max-w-2xl space-y-3">
+    <div className="max-w-3xl mx-auto space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-xs text-zinc-400 dark:text-zinc-500">
           {isLead ? 'All project activity' : "Showing your own activity. Project leads see everyone's."}
         </p>
         <RefreshButton onClick={refetch} loading={loading} label="Refresh activity" />
       </div>
-      <ReportState loading={loading} error={events.length === 0 ? error : null} onRetry={refetch} empty={events.length === 0} emptyText="No activity yet.">
-        <div className={`${card} divide-y divide-zinc-100 dark:divide-zinc-800`}>
-          {events.map((e, i) => <ActivityRow key={e._id ?? i} event={e} userFor={userFor} />)}
-        </div>
+      <ReportState loading={loading} error={events.length === 0 ? error : null} onRetry={refetch} empty={events.length === 0} emptyText="No activity yet." skeleton={<ActivityTimelineSkeleton />}>
+        <ActivityTimeline events={events} userFor={userFor} />
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
         {events.length < total && (
           <button onClick={() => void loadMore()} disabled={loadingMore}
@@ -231,7 +250,8 @@ function VelocityCard({ projectId }: { projectId: string }) {
         <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Sprint velocity</h3>
         <RefreshButton onClick={refetch} loading={loading} label="Refresh velocity" />
       </div>
-      <ReportState loading={loading} error={error} onRetry={refetch} empty={sprints.length === 0} emptyText="No sprints have been started yet, so there is no velocity to show.">
+      <ReportState loading={loading} error={error} onRetry={refetch} empty={sprints.length === 0} emptyText="No sprints have been started yet, so there is no velocity to show."
+        skeleton={<><Skeleton className="h-3 w-64 mb-4" /><ChartSkeleton /><StatTilesSkeleton /></>}>
         <div className="flex items-center justify-between mb-4">
           <p className="text-xs text-zinc-400 dark:text-zinc-500">Story points committed at start vs. completed per sprint</p>
           <div className="flex items-center gap-3 text-[11px] text-zinc-500 dark:text-zinc-400 flex-shrink-0">
@@ -264,7 +284,22 @@ function CycleTimeCard({ projectId }: { projectId: string }) {
         <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Cycle time</h3>
         <RefreshButton onClick={refetch} loading={loading} label="Refresh cycle time" />
       </div>
-      <ReportState loading={loading} error={error} onRetry={refetch} empty={!data || data.completed_tickets === 0} emptyText="No tickets have been completed yet, so there is no cycle time to show.">
+      <ReportState loading={loading} error={error} onRetry={refetch} empty={!data || data.completed_tickets === 0} emptyText="No tickets have been completed yet, so there is no cycle time to show."
+        skeleton={
+          <>
+            <Skeleton className="h-3 w-80 max-w-full mb-4" />
+            <StatTilesSkeleton />
+            <div className="mt-5 pt-5 border-t border-zinc-100 dark:border-zinc-800 space-y-3">
+              {[0, 1, 2, 3, 4].map(i => (
+                <div key={i} className="flex items-center gap-4">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-1.5 flex-1" />
+                  <Skeleton className="h-4 w-12" />
+                </div>
+              ))}
+            </div>
+          </>
+        }>
         <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-4">
           Lead time is creation → Done. Cycle time is the days a ticket spent In progress or In review.
         </p>
@@ -334,7 +369,8 @@ function BurndownCard({ teamId, projectId }: { teamId: string; projectId: string
         </h3>
         <RefreshButton onClick={refreshBoth} loading={sprintsQ.loading || reportQ.loading} label="Refresh burndown" />
       </div>
-      <ReportState loading={sprintsQ.loading} error={sprintsQ.error} onRetry={sprintsQ.refetch} empty={sprints.length === 0} emptyText="Start a sprint to see its burndown.">
+      <ReportState loading={sprintsQ.loading} error={sprintsQ.error} onRetry={sprintsQ.refetch} empty={sprints.length === 0} emptyText="Start a sprint to see its burndown."
+        skeleton={<><Skeleton className="h-3 w-56 mb-4" /><ChartSkeleton /><StatTilesSkeleton /></>}>
         <div className="flex items-center justify-between gap-4 mb-4">
           <p className="text-xs text-zinc-400 dark:text-zinc-500 min-w-0 truncate">
             {report ? `${dayLabel(utcDay(report.start_date))} – ${dayLabel(utcDay(report.end_date))} · ${report.committed_points} story points committed` : ' '}
@@ -359,7 +395,8 @@ function BurndownCard({ teamId, projectId }: { teamId: string; projectId: string
             is still in the Created state, so this one can't get a burndown. Add both dates when creating the next sprint.
           </p>
         ) : (
-        <ReportState loading={reportQ.loading} error={reportQ.error} onRetry={reportQ.refetch} empty={!report || series.length === 0} emptyText="No burndown data for this sprint yet.">
+        <ReportState loading={reportQ.loading} error={reportQ.error} onRetry={reportQ.refetch} empty={!report || series.length === 0} emptyText="No burndown data for this sprint yet."
+          skeleton={<><ChartSkeleton /><StatTilesSkeleton /></>}>
           <BurndownChart data={series} />
           <StatTiles stats={[
             { label: 'Committed at start', value: `${report?.committed_points ?? 0} pts` },
@@ -389,17 +426,29 @@ interface ReportsPageProps {
 }
 
 export function ReportsPage({ teamName, onGoToTeam, teamId, project, currentUserId, onNavigateProjectTab, onOpenSettings }: ReportsPageProps) {
-  const [tab, setTab] = useState<ReportTab>('activity');
+  // null until the user picks a tab, so the default follows `isLead` even if the current user loads late.
+  const [chosenTab, setChosenTab] = useState<ReportTab | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
+
+  // Esc closes the chat, even from its input (a chat has nothing to "cancel" first).
+  useEffect(() => {
+    if (!chatOpen) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape' && !e.defaultPrevented) setChatOpen(false);
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [chatOpen]);
   const isLead = project.leadIds.includes(currentUserId);
 
   // Hiding the Dashboard tab for non-leads is politeness; devboard-analytics returns
   // 403 for anyone else regardless.
+  // Leads land on the Dashboard; everyone else only has Activity.
   const tabs: { id: ReportTab; label: string }[] = [
-    { id: 'activity', label: 'Activity' },
     ...(isLead ? [{ id: 'dashboard' as const, label: 'Dashboard' }] : []),
+    { id: 'activity', label: 'Activity' },
   ];
-  const activeTab = tabs.some(t => t.id === tab) ? tab : 'activity';
+  const activeTab = tabs.find(t => t.id === chosenTab)?.id ?? tabs[0].id;
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950 relative">
@@ -417,7 +466,7 @@ export function ReportsPage({ teamName, onGoToTeam, teamId, project, currentUser
       <div className="flex-shrink-0 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 px-5">
         <div className="flex gap-0">
           {tabs.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
+            <button key={t.id} onClick={() => setChosenTab(t.id)}
               className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
                 activeTab === t.id
                   ? 'border-indigo-600 dark:border-indigo-400 text-indigo-700 dark:text-indigo-400'
@@ -458,16 +507,7 @@ export function ReportsPage({ teamName, onGoToTeam, teamId, project, currentUser
         <>
           <div className="absolute inset-0 bg-black/10 dark:bg-black/30 z-10" onClick={() => setChatOpen(false)} />
           <div className="absolute top-0 right-0 bottom-0 z-20 w-full sm:w-[380px] bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 flex-shrink-0">
-              <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Chat · {project.name}</p>
-              <button onClick={() => setChatOpen(false)} aria-label="Close chat"
-                className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-              </button>
-            </div>
-            <div className="flex-1 min-h-0">
-              <ChatPanel projectId={project.id} projectName={project.name} />
-            </div>
+            <ChatPanel projectId={project.id} projectName={project.name} isLead={isLead} onClose={() => setChatOpen(false)} />
           </div>
         </>
       )}

@@ -1,4 +1,6 @@
+import { useRef } from 'react';
 import type { Notification } from '@/types';
+import { useDismiss } from '@/hooks/useDismiss';
 
 interface Props {
   notifications: Notification[];
@@ -39,11 +41,14 @@ function NotifIcon({ type }: { type: Notification['type'] }) {
 
 export function NotificationsPanel({ notifications, total, error, onClose, onMarkAllRead, onOpen, onDismiss }: Props) {
   const unread = notifications.filter(n => !n.read).length;
+  // The backdrop already closes on click; this adds Esc.
+  const panelRef = useRef<HTMLDivElement>(null);
+  useDismiss(panelRef, onClose);
 
   return (
     <>
       <div className="fixed inset-0 bg-black/20 dark:bg-black/40 backdrop-blur-sm z-30" onClick={onClose} />
-      <div className="fixed inset-y-0 right-0 z-40 w-full sm:w-[380px] bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 flex flex-col shadow-2xl">
+      <div ref={panelRef} className="fixed inset-y-0 right-0 z-40 w-full sm:w-[380px] bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 flex flex-col shadow-2xl">
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-zinc-100 dark:border-zinc-800 flex-shrink-0">
           <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Notifications</h2>

@@ -112,9 +112,24 @@ export function useProjectData(teamId: string, projectId: string, projectMembers
     refetch();
   }
 
+  // Optimistic: the card moves the moment it's dropped instead of after the
+  // round-trip. The refetch confirms it, or puts it back if the request failed.
   async function updateTicketStatus(ticketId: string, status: TicketStatus) {
-    await apiUpdateTicket(teamId, projectId, ticketId, { status });
-    refetch();
+    setBoard(prev => {
+      const moving = Object.values(prev.columns).flat().find(t => t.id === ticketId);
+      if (!moving || moving.status === status) return prev;
+      const columns = { ...prev.columns };
+      columns[moving.status] = columns[moving.status].filter(t => t.id !== ticketId);
+      // Same order the server uses (newest first), so nothing jumps when the refetch lands.
+      columns[status] = [...columns[status], { ...moving, status }]
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
+      return { ...prev, columns };
+    });
+    try {
+      await apiUpdateTicket(teamId, projectId, ticketId, { status });
+    } finally {
+      refetch();
+    }
   }
 
   async function updateTicketFields(ticketId: string, patch: UpdateTicketInput) {

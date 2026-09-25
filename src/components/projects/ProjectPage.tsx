@@ -29,9 +29,11 @@ interface Props {
   onCorrectDeepLinkTab: (tab: TabType) => void;
   onOpenReports: () => void;
   onOpenSettings: () => void;
+  /** Settings → Labels directly (Settings itself opens on General). */
+  onOpenLabels: () => void;
 }
 
-export function ProjectPage({ teamName, onGoToTeam, teamId, project, currentUserId, tab, deepLinkTicketId, onTabChange, onCloseDeepLink, onCorrectDeepLinkTab, onOpenReports, onOpenSettings }: Props) {
+export function ProjectPage({ teamName, onGoToTeam, teamId, project, currentUserId, tab, deepLinkTicketId, onTabChange, onCloseDeepLink, onCorrectDeepLinkTab, onOpenReports, onOpenSettings, onOpenLabels }: Props) {
   const [activeTicketId, setActiveTicketId] = useState<string | null>(deepLinkTicketId ?? null);
 
   useEffect(() => {
@@ -68,6 +70,10 @@ export function ProjectPage({ teamName, onGoToTeam, teamId, project, currentUser
 
   const openSprints = sprints.filter(s => s.status !== 'completed');
 
+  // Mirrors devboard-work: leads manage everything, contributors edit their own tickets.
+  const isLead = project.leadIds.includes(currentUserId);
+  const canEditTicket = (t: { assignee?: { id: string } }) => isLead || t.assignee?.id === currentUserId;
+
   const initialLoad = loading && allLoadedTickets.length === 0;
 
   if (error) {
@@ -100,6 +106,8 @@ export function ProjectPage({ teamName, onGoToTeam, teamId, project, currentUser
             onTicketClick={setActiveTicketId}
             onStatusChange={(ticketId, status: TicketStatus) => void updateTicketStatus(ticketId, status)}
             onCreateTicket={(status, title, type: TicketType) => void createTicket({ title, type, status }, board.sprint?.id).then(() => type === 'epic' && refetchEpics())}
+            isLead={isLead}
+            canEditTicket={canEditTicket}
           />
         )}
         {tab === 'backlog' && (
@@ -110,6 +118,7 @@ export function ProjectPage({ teamName, onGoToTeam, teamId, project, currentUser
             onTicketClick={setActiveTicketId}
             onCreateTicket={(title, type) => void createTicket({ title, type }).then(() => type === 'epic' && refetchEpics())}
             onAddToSprint={(sprintId, ticketId) => void addTicketToSprint(sprintId, ticketId)}
+            isLead={isLead}
           />
         )}
         {tab === 'sprints' && (
@@ -122,6 +131,7 @@ export function ProjectPage({ teamName, onGoToTeam, teamId, project, currentUser
             onCompleteSprint={(id) => void completeSprint(id)}
             onRemoveFromSprint={(sprintId, ticketId) => void removeTicketFromSprint(sprintId, ticketId)}
             onTicketClick={setActiveTicketId}
+            isLead={isLead}
           />
         )}
         </>
@@ -135,16 +145,18 @@ export function ProjectPage({ teamName, onGoToTeam, teamId, project, currentUser
           projectId={project.id}
           ticket={activeTicket}
           projectMembers={project.members}
-          isLead={project.leadIds.includes(currentUserId)}
           projectLabels={projectLabels}
           onCreateProjectLabel={createLabel}
           projectEpics={projectEpics}
           onOpenTicket={setActiveTicketId}
+          inSprint={!backlogTickets.some(t => t.id === activeTicket.id)}
           onClose={() => { setActiveTicketId(null); if (deepLinkTicketId) onCloseDeepLink(); }}
           onCommit={(patch) => void updateTicketFields(activeTicket.id, patch)}
           onAddLabel={(labelId) => addTicketLabel(teamId, project.id, activeTicket.id, labelId).then(refetchTickets)}
           onRemoveLabel={(labelId) => removeTicketLabel(teamId, project.id, activeTicket.id, labelId).then(refetchTickets)}
-          onManageLabels={() => { setActiveTicketId(null); onOpenSettings(); }}
+          onManageLabels={() => { setActiveTicketId(null); onOpenLabels(); }}
+          currentUserId={currentUserId}
+          isLead={isLead}
         />
       )}
     </div>

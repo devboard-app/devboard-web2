@@ -8,6 +8,8 @@ export interface ApiProject {
   name: string;
   key: string;
   description: string;
+  avatar: string; // public image URL, '' when unset
+  banner: string;
   team: string;
   created_by: string;
   created_at: string;
@@ -22,6 +24,10 @@ export interface ProjectMembership {
   role: ProjectRole;
   joined_at: string;
 }
+
+// Lead only server-side. Partial: send just the fields that change.
+export const updateProject = (teamId: string, projectId: string, patch: { avatar?: string; banner?: string }) =>
+  apiPatch<ApiProject>(`/api/teams/${teamId}/projects/${projectId}/`, patch);
 
 export const listProjects = (teamId: string) =>
   apiGet<Paginated<ApiProject>>(`/api/teams/${teamId}/projects/`, { limit: 100 });

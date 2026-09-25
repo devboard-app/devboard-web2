@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { EpicSummary, Ticket, TicketStatus, TicketType } from '@/types';
 import { Avatar } from '@/components/layout/AppShell';
 import { EpicTag } from '@/components/tickets/EpicTag';
+import { TicketTypeIcon } from '@/components/tickets/TicketTypeIcon';
 
 interface Props {
   columns: Record<TicketStatus, Ticket[]>;
@@ -9,10 +10,15 @@ interface Props {
   onTicketClick: (id: string) => void;
   onStatusChange: (ticketId: string, status: TicketStatus) => void;
   onCreateTicket: (status: TicketStatus, title: string, type: TicketType) => void;
+  /** Adding a card here also adds it to the sprint, which is lead-only in devboard-work. */
+  isLead: boolean;
+  /** Leads move any ticket; contributors only the ones assigned to them. */
+  canEditTicket: (ticket: Ticket) => boolean;
 }
 
+// No Backlog column: the board only shows the active sprint, and a ticket joining
+// a sprint moves backlog -> todo server-side (devboard-work add_ticket_to_sprint).
 const columnDefs: { status: TicketStatus; label: string; accent: string }[] = [
-  { status: 'backlog', label: 'Backlog', accent: 'bg-zinc-300 dark:bg-zinc-600' },
   { status: 'todo', label: 'Todo', accent: 'bg-zinc-400' },
   { status: 'in_progress', label: 'In Progress', accent: 'bg-blue-500' },
   { status: 'in_review', label: 'In Review', accent: 'bg-amber-500' },
@@ -28,15 +34,28 @@ const priorityDot: Record<string, string> = {
   low: 'bg-zinc-300 dark:bg-zinc-600',
 };
 
-function TicketCard({ ticket, epic, onClick, onDragStart }: { ticket: Ticket; epic?: EpicSummary; onClick: () => void; onDragStart: () => void }) {
+function TicketCard({ ticket, epic, isDragging, canDrag, onClick, onDragStart, onDragEnd }: {
+  ticket: Ticket; epic?: EpicSummary; isDragging: boolean; canDrag: boolean; onClick: () => void; onDragStart: () => void; onDragEnd: () => void;
+}) {
   return (
     <div
-      draggable
-      onDragStart={onDragStart}
+      draggable={canDrag}
+      onDragStart={e => {
+        // Firefox won't start a drag without data.
+        e.dataTransfer.setData('text/plain', ticket.id);
+        e.dataTransfer.effectAllowed = 'move';
+        onDragStart();
+      }}
+      onDragEnd={onDragEnd}
       onClick={onClick}
-      className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 cursor-pointer hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-sm transition-all group select-none">
+      data-keep-panel-open
+      // transition-colors, not transition-all: animating layout properties made cards
+      // slide around while the drop target changed under the cursor.
+      className={`bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 cursor-pointer hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-sm transition-colors group select-none ${
+        isDragging ? 'opacity-40' : ''}`}>
       {/* Key + priority */}
       <div className="flex items-center gap-1.5 mb-2">
+        <TicketTypeIcon type={ticket.type} />
         <span className="text-[11px] font-mono text-zinc-400 dark:text-zinc-500">{ticket.key}</span>
         <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${priorityDot[ticket.priority]}`} title={ticket.priority} />
         {epic && <EpicTag epic={epic} />}
@@ -86,19 +105,25 @@ function TicketCard({ ticket, epic, onClick, onDragStart }: { ticket: Ticket; ep
   );
 }
 
-export function BoardView({ columns, epicById, onTicketClick, onStatusChange, onCreateTicket }: Props) {
+export function BoardView({ columns, epicById, onTicketClick, onStatusChange, onCreateTicket, isLead, canEditTicket }: Props) {
   const [dragging, setDragging] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<TicketStatus | null>(null);
   const [newTicketCol, setNewTicketCol] = useState<TicketStatus | null>(null);
   const [newTicketTitle, setNewTicketTitle] = useState('');
   const [newTicketType, setNewTicketType] = useState<TicketType>('task');
 
+  const draggingFrom = dragging
+    ? columnDefs.find(c => (columns[c.status] ?? []).some(t => t.id === dragging))?.status ?? null
+    : null;
+
+  function endDrag() {
+    setDragging(null);
+    setDragOver(null);
+  }
+
   function handleDrop(status: TicketStatus) {
-    if (dragging) {
-      onStatusChange(dragging, status);
-      setDragging(null);
-      setDragOver(null);
-    }
+    if (dragging && status !== draggingFrom) onStatusChange(dragging, status);
+    endDrag();
   }
 
   function submitNewTicket(status: TicketStatus) {
@@ -115,15 +140,27 @@ export function BoardView({ columns, epicById, onTicketClick, onStatusChange, on
       <div className="flex gap-3 h-full p-4 min-w-max md:min-w-0 md:w-full">
         {columnDefs.map(col => {
           const colTickets = columns[col.status] ?? [];
-          const isDragTarget = dragOver === col.status;
+          // Its own column isn't a target: dropping there changes nothing.
+          const isDragTarget = dragOver === col.status && col.status !== draggingFrom;
           return (
             <div key={col.status}
               className={`flex flex-col w-[280px] md:flex-1 flex-shrink-0 rounded-xl transition-colors ${
-                isDragTarget ? 'bg-indigo-50/50 dark:bg-indigo-950/30' : 'bg-zinc-100/60 dark:bg-zinc-900/40'
+                isDragTarget
+                  ? 'bg-indigo-50/60 dark:bg-indigo-950/30 ring-2 ring-inset ring-indigo-300 dark:ring-indigo-700'
+                  : 'bg-zinc-100/60 dark:bg-zinc-900/40'
               }`}
-              onDragOver={e => { e.preventDefault(); setDragOver(col.status); }}
-              onDragLeave={() => setDragOver(null)}
-              onDrop={() => handleDrop(col.status)}>
+              onDragOver={e => {
+                if (!dragging) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                setDragOver(col.status);
+              }}
+              // dragleave also fires when the pointer moves onto a card inside the column;
+              // only clear when it really leaves the column, or the highlight flickers.
+              onDragLeave={e => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragOver(prev => (prev === col.status ? null : prev));
+              }}
+              onDrop={e => { e.preventDefault(); handleDrop(col.status); }}>
 
               {/* Column header */}
               <div className="flex items-center gap-2 px-3 py-2.5">
@@ -134,14 +171,12 @@ export function BoardView({ columns, epicById, onTicketClick, onStatusChange, on
 
               {/* Cards */}
               <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-2">
-                {colTickets.length === 0 && !isDragTarget && (
-                  <div className="py-8 text-center">
-                    <p className="text-xs text-zinc-400 dark:text-zinc-600">No tickets</p>
-                  </div>
-                )}
-                {isDragTarget && (
-                  <div className="border-2 border-dashed border-indigo-300 dark:border-indigo-700 rounded-lg h-16 flex items-center justify-center">
-                    <p className="text-xs text-indigo-400 dark:text-indigo-600">Drop here</p>
+                {/* Same height whether or not it's a target, so nothing below it shifts. */}
+                {colTickets.length === 0 && (
+                  <div className={`py-8 text-center rounded-lg ${isDragTarget ? 'border-2 border-dashed border-indigo-300 dark:border-indigo-700' : 'border-2 border-transparent'}`}>
+                    <p className={`text-xs ${isDragTarget ? 'text-indigo-500 dark:text-indigo-400' : 'text-zinc-400 dark:text-zinc-600'}`}>
+                      {isDragTarget ? 'Drop here' : 'No tickets'}
+                    </p>
                   </div>
                 )}
                 {colTickets.map(ticket => (
@@ -149,13 +184,17 @@ export function BoardView({ columns, epicById, onTicketClick, onStatusChange, on
                     key={ticket.id}
                     ticket={ticket}
                     epic={ticket.parentEpicId ? epicById[ticket.parentEpicId] : undefined}
+                    isDragging={dragging === ticket.id}
+                    canDrag={canEditTicket(ticket)}
                     onClick={() => onTicketClick(ticket.id)}
                     onDragStart={() => setDragging(ticket.id)}
+                    onDragEnd={endDrag}
                   />
                 ))}
 
                 {/* Add card form */}
-                {newTicketCol === col.status ? (
+                {/* New work starts in Todo (like Jira); only leads, since it also joins the sprint. */}
+                {!isLead || col.status !== 'todo' ? null : newTicketCol === col.status ? (
                   <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-2.5">
                     <textarea
                       autoFocus

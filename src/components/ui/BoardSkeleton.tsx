@@ -1,6 +1,6 @@
 import { Skeleton } from './Skeleton';
 
-const COLUMN_CARD_COUNTS = [3, 2, 1, 0, 2];
+const COLUMN_CARD_COUNTS = [3, 2, 1, 2];
 
 function CardPlaceholder() {
   return (

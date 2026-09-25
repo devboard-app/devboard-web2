@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { EpicSummary, Ticket, Priority, TicketStatus, TicketType, Sprint } from '@/types';
 import { Avatar } from '@/components/layout/AppShell';
 import { EpicTag } from '@/components/tickets/EpicTag';
+import { TicketTypeIcon } from '@/components/tickets/TicketTypeIcon';
 
 interface Props {
   tickets: Ticket[];
@@ -10,6 +11,8 @@ interface Props {
   onTicketClick: (id: string) => void;
   onCreateTicket: (title: string, type: TicketType) => void;
   onAddToSprint: (sprintId: string, ticketId: string) => void;
+  /** Epics and sprint planning are lead-only in devboard-work; contributors can still create tickets. */
+  isLead: boolean;
 }
 
 const ticketTypes: TicketType[] = ['task', 'bug', 'feature', 'improvement', 'epic'];
@@ -51,7 +54,7 @@ function StatusDot({ status }: { status: TicketStatus }) {
   );
 }
 
-export function BacklogView({ tickets, epicById, openSprints, onTicketClick, onCreateTicket, onAddToSprint }: Props) {
+export function BacklogView({ tickets, epicById, openSprints, onTicketClick, onCreateTicket, onAddToSprint, isLead }: Props) {
   const [filter, setFilter] = useState<'all' | 'unassigned'>('all');
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
@@ -109,7 +112,7 @@ export function BacklogView({ tickets, epicById, openSprints, onTicketClick, onC
               className="w-48 px-2.5 py-1.5 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             <select value={newType} onChange={e => setNewType(e.target.value as TicketType)}
               className="text-xs px-2 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 focus:outline-none capitalize">
-              {ticketTypes.map(t => <option key={t} value={t}>{t}</option>)}
+              {ticketTypes.filter(t => isLead || t !== 'epic').map(t => <option key={t} value={t}>{t}</option>)}
             </select>
             <button onClick={submitCreate} disabled={!newTitle.trim()}
               className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors">
@@ -131,7 +134,7 @@ export function BacklogView({ tickets, epicById, openSprints, onTicketClick, onC
       <div className="flex-1 overflow-y-auto">
         {/* Column headers */}
         <div className="hidden md:grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto] gap-4 items-center px-5 py-2 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60">
-          <span className="text-[11px] font-semibold text-zinc-400 w-16">KEY</span>
+          <span className="text-[11px] font-semibold text-zinc-400 w-20">KEY</span>
           <span className="text-[11px] font-semibold text-zinc-400">TITLE</span>
           <span className="text-[11px] font-semibold text-zinc-400 w-24">STATUS</span>
           <span className="text-[11px] font-semibold text-zinc-400 w-20">PRIORITY</span>
@@ -156,12 +159,13 @@ export function BacklogView({ tickets, epicById, openSprints, onTicketClick, onC
           <div key={ticket.id}
             className="w-full text-left md:grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto] gap-4 items-center px-5 py-3 border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900/60 transition-colors group">
 
-            <button onClick={() => onTicketClick(ticket.id)} className="contents text-left">
+            <button onClick={() => onTicketClick(ticket.id)} data-keep-panel-open className="contents text-left">
               {/* Mobile layout */}
               <div className="md:hidden flex items-start gap-3">
                 <StatusDot status={ticket.status} />
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
+                    <TicketTypeIcon type={ticket.type} />
                     <span className="text-[11px] font-mono text-zinc-400 dark:text-zinc-500">{ticket.key}</span>
                     {ticket.parentEpicId && epicById[ticket.parentEpicId] && <EpicTag epic={epicById[ticket.parentEpicId]} />}
                     {ticket.labels.slice(0, 2).map(l => (
@@ -177,7 +181,10 @@ export function BacklogView({ tickets, epicById, openSprints, onTicketClick, onC
               </div>
 
               {/* Desktop layout */}
-              <span className="hidden md:block text-[11px] font-mono text-zinc-400 dark:text-zinc-500 w-16">{ticket.key}</span>
+              <span className="hidden md:flex items-center gap-1.5 text-[11px] font-mono text-zinc-400 dark:text-zinc-500 w-20">
+                <TicketTypeIcon type={ticket.type} />
+                {ticket.key}
+              </span>
               <div className="hidden md:flex items-center gap-2 flex-1 min-w-0">
                 <p className="text-sm text-zinc-800 dark:text-zinc-200 truncate group-hover:text-zinc-900 dark:group-hover:text-zinc-100">{ticket.title}</p>
                 {ticket.parentEpicId && epicById[ticket.parentEpicId] && <EpicTag epic={epicById[ticket.parentEpicId]} />}
@@ -208,7 +215,7 @@ export function BacklogView({ tickets, epicById, openSprints, onTicketClick, onC
             </button>
 
             <div className="hidden md:block w-28" onClick={e => e.stopPropagation()}>
-              {openSprints.length > 0 ? (
+              {isLead && openSprints.length > 0 ? (
                 <select defaultValue="" onChange={e => { if (e.target.value) { onAddToSprint(e.target.value, ticket.id); e.target.value = ''; } }}
                   className="w-full text-xs px-1.5 py-1 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 focus:outline-none opacity-0 group-hover:opacity-100 transition-opacity">
                   <option value="">+ Sprint</option>

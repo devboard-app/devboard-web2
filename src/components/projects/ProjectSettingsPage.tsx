@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import type { Project, TabType } from '@/types';
 import { ProjectTopBar } from './ProjectTopBar';
 
-type SettingsTab = 'labels' | 'members';
+type SettingsTab = 'general' | 'labels' | 'members';
 
 interface Props {
   teamName: string;
@@ -16,6 +16,13 @@ interface Props {
 }
 
 const TABS: { id: SettingsTab; label: string; icon: ReactNode }[] = [
+  {
+    id: 'general',
+    label: 'General',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="2.5" width="11" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.2" /><circle cx="5" cy="6" r="1.1" stroke="currentColor" strokeWidth="1.1" /><path d="M1.5 10l3-2.5 2.5 2 2-1.5 3.5 2.5" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" /></svg>
+    ),
+  },
   {
     id: 'labels',
     label: 'Labels',
@@ -43,6 +50,7 @@ export function ProjectSettingsPage({ teamName, onGoToTeam, project, activeTab, 
         onTabChange={onNavigateProjectTab}
         onOpenReports={onOpenReports}
         onOpenSettings={() => onTabChange(activeTab)}
+        showBanner={activeTab !== 'general'}
       />
       <div className="flex-shrink-0 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 px-5">
         <div className="flex gap-4">
