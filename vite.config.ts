@@ -5,6 +5,15 @@ import path from 'node:path'
 
 import siteConfiguration from './.figma/make/site.json'
 
+// Where the proxy finds each backend. Inside the devboard-web2 container
+// (docker-compose.yml sets DEVBOARD_IN_DOCKER) that's the container name on
+// devboard-network, where every service listens on 8000; run with `pnpm dev`
+// on the host, it's the port the service publishes to localhost.
+const inDocker = process.env.DEVBOARD_IN_DOCKER === '1'
+function service(name: string, hostPort: number): string {
+  return inDocker ? `http://devboard-${name}:8000` : `http://localhost:${hostPort}`
+}
+
 // Vite config — https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // .figma/make/deploy-preview passes `--mode development` for cached-preview builds.
@@ -50,14 +59,14 @@ export default defineConfig(({ mode }) => {
         // don't. Scoping the proxy to the trailing slash keeps a direct
         // browser navigation to those two page routes from being swallowed
         // by the API proxy before the SPA ever renders them.
-        '^/auth/.+/': { target: 'http://localhost:8001', changeOrigin: true, xfwd: true },
-        '/api/users': { target: 'http://localhost:8003', changeOrigin: true, xfwd: true },
-        '/api/teams': { target: 'http://localhost:8004', changeOrigin: true, xfwd: true },
-        '/api/notifications': { target: 'http://localhost:8005', changeOrigin: true, xfwd: true },
-        '/api/integrations': { target: 'http://localhost:8005', changeOrigin: true, xfwd: true },
-        '/reports': { target: 'http://localhost:8006', changeOrigin: true, xfwd: true },
-        '/projects': { target: 'http://localhost:8006', changeOrigin: true, xfwd: true },
-        '/attachments': { target: 'http://localhost:8007', changeOrigin: true, xfwd: true },
+        '^/auth/.+/': { target: service('auth', 8001), changeOrigin: true, xfwd: true },
+        '/api/users': { target: service('core', 8003), changeOrigin: true, xfwd: true },
+        '/api/teams': { target: service('work', 8004), changeOrigin: true, xfwd: true },
+        '/api/notifications': { target: service('integrations', 8005), changeOrigin: true, xfwd: true },
+        '/api/integrations': { target: service('integrations', 8005), changeOrigin: true, xfwd: true },
+        '/reports': { target: service('analytics', 8006), changeOrigin: true, xfwd: true },
+        '/projects': { target: service('analytics', 8006), changeOrigin: true, xfwd: true },
+        '/attachments': { target: service('attachments', 8007), changeOrigin: true, xfwd: true },
       },
     },
     preview: {

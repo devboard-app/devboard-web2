@@ -1,0 +1,24 @@
+# Pinned so this file and the root compose file resolve to the SAME project.
+# Every service sets an explicit container_name, which is global rather than
+# project-scoped, so two projects can never hold the same service at once.
+name: devboard
+
+services:
+  devboard-web2:
+    build:
+      context: .
+    container_name: devboard-web2
+    restart: unless-stopped
+    environment:
+      # Makes vite.config.ts proxy to the backends by container name instead
+      # of the localhost ports they publish to the host.
+      DEVBOARD_IN_DOCKER: "1"
+    ports:
+      - "8443:8443"
+    networks:
+      - devboard-network
+
+networks:
+  devboard-network:
+    name: devboard-network
+    external: true
